@@ -7,6 +7,8 @@
     <AssemblyName>DndSheet</AssemblyName>
     <RootNamespace>DndSheet.App</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- Original artwork (red d20 on black), not a Wizards of the Coast trademark; see NOTICE.md. -->
+    <ApplicationIcon>Assets\DndSheet.ico</ApplicationIcon>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
   </PropertyGroup>
 

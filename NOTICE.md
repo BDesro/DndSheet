@@ -11,6 +11,7 @@ DndSheet is an unofficial fan tool. It is not affiliated with, endorsed or spons
 ## What it deliberately does not contain
 
 - **No rulebook text.** It has no spell, feat, class-feature or monster descriptions. Spell and feature description fields are empty until the player types in their own notes. The UI's short helper phrases are original wording.
+- **The app icon is original artwork** (a red d20 on black, `src/DndSheet.App/Assets/DndSheet.ico`). The official D&D ampersand logo is a Wizards of the Coast trademark and is intentionally not used.
 - **No official artwork, logos, fonts or character-sheet PDF.** The sheet view is an original layout that follows the *organization* of the familiar 5e sheet (where boxes are and what they hold), drawn with standard WPF controls. It does not trace or embed the official PDF.
 
 ## If content is added later
