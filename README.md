@@ -18,6 +18,16 @@ Characters are stored locally in SQLite, autosaved, backed up daily, and can be 
 - [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0) to run a release package
 - [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0) to build from source
 
+## Install (double-click to launch)
+
+**From a release:** download `DndSheet-<version>-win-x64.zip` from the [Releases page](https://github.com/BDesro/DndSheet/releases), unzip it into a folder you own (for example `%LOCALAPPDATA%\Programs\DndSheet`), and run `DndSheet.exe`. Once installed, the app updates itself from new releases.
+
+**From source:** this builds the app, installs it to `%LOCALAPPDATA%\Programs\DndSheet`, and adds Start Menu and desktop shortcuts:
+
+```bash
+powershell -ExecutionPolicy Bypass -File scripts/install.ps1
+```
+
 ## Build, run, test
 
 ```bash
