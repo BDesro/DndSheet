@@ -1,5 +1,15 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <AssemblyName>DndSheet</AssemblyName>
+    <RootNamespace>DndSheet.App</RootNamespace>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+  </PropertyGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\DndSheet.Core\DndSheet.Core.csproj" />
     <ProjectReference Include="..\DndSheet.Infrastructure\DndSheet.Infrastructure.csproj" />
@@ -12,12 +22,16 @@
     <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="10.0.12" />
   </ItemGroup>
 
-  <PropertyGroup>
-    <OutputType>WinExe</OutputType>
-    <TargetFramework>net10.0-windows</TargetFramework>
-    <Nullable>enable</Nullable>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <UseWPF>true</UseWPF>
-  </PropertyGroup>
+  <ItemGroup>
+    <Using Include="System.IO" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Production defaults ship with every build. -->
+    <None Update="appsettings.json" CopyToOutputDirectory="PreserveNewest" />
+    <!-- Development overrides (DevelopmentMode = true) exist only in Debug output, never in a release package. -->
+    <None Update="appsettings.Development.json" CopyToOutputDirectory="PreserveNewest" Condition="'$(Configuration)' == 'Debug'" />
+    <None Update="appsettings.Development.json" CopyToOutputDirectory="Never" CopyToPublishDirectory="Never" Condition="'$(Configuration)' != 'Debug'" />
+  </ItemGroup>
 
 </Project>

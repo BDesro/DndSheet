@@ -1,23 +1,30 @@
-﻿using System.Text;
+using System.ComponentModel;
 using System.Windows;
-using System.Windows.Controls;
-using System.Windows.Data;
-using System.Windows.Documents;
 using System.Windows.Input;
-using System.Windows.Media;
-using System.Windows.Media.Imaging;
-using System.Windows.Navigation;
-using System.Windows.Shapes;
+using DndSheet.App.ViewModels;
 
 namespace DndSheet.App;
 
-/// <summary>
-/// Interaction logic for MainWindow.xaml
-/// </summary>
-public partial class MainWindow : Window
+public partial class MainWindow
 {
-    public MainWindow()
+    public MainWindow() => InitializeComponent();
+
+    private MainViewModel? Vm => DataContext as MainViewModel;
+
+    private void OnClosing(object? sender, CancelEventArgs e)
     {
-        InitializeComponent();
+        if (Vm is { } vm && !vm.OnClosing()) e.Cancel = true;
+    }
+
+    private void OnExit(object sender, RoutedEventArgs e) => Close();
+
+    private void CanPrint(object sender, CanExecuteRoutedEventArgs e) => e.CanExecute = Vm?.HasCharacter == true;
+
+    private void OnPrint(object sender, ExecutedRoutedEventArgs e)
+    {
+        if (Vm is null) return;
+        // The sheet must be laid out to print, so switch to it first.
+        Vm.SelectedView = 0;
+        Dispatcher.BeginInvoke(Sheet.Print, System.Windows.Threading.DispatcherPriority.Loaded);
     }
 }

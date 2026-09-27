@@ -12,10 +12,13 @@ public sealed class AppPaths
     public AppPaths(string? dataDirectoryOverride = null)
     {
         Root = string.IsNullOrWhiteSpace(dataDirectoryOverride)
-            ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "DndSheet")
+            ? DefaultRoot
             : Path.GetFullPath(Environment.ExpandEnvironmentVariables(dataDirectoryOverride));
         foreach (var dir in new[] { Root, Logs, Backups, Updates }) Directory.CreateDirectory(dir);
     }
+
+    public static string DefaultRoot { get; } =
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "DndSheet");
 
     public string Root { get; }
     public string Database => Path.Combine(Root, "characters.db");
@@ -23,7 +26,8 @@ public sealed class AppPaths
     public string Backups => Path.Combine(Root, "backups");
     public string Updates => Path.Combine(Root, "updates");
     /// <summary>Optional per-user configuration overrides (e.g. DevelopmentMode) — no binary changes needed.</summary>
-    public string UserSettings => Path.Combine(Root, "appsettings.user.json");
+    /// <remarks>Always under the default root: it is read before any DataDirectory override is known.</remarks>
+    public static string UserSettings => Path.Combine(DefaultRoot, "appsettings.user.json");
 }
 
 public static class DatabaseBackups

@@ -1,0 +1,25 @@
+<Window x:Class="DndSheet.App.Views.GitHubTokenDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="GitHub access token" Style="{StaticResource AppWindow}" Width="500" SizeToContent="Height"
+        ResizeMode="NoResize" WindowStartupLocation="CenterOwner" ShowInTaskbar="False">
+    <StackPanel Margin="22,18">
+        <TextBlock Style="{StaticResource SectionTitle}" Text="Private release access" />
+        <TextBlock Style="{StaticResource Hint}">
+            Only needed when updates come from a <Bold>private</Bold> repository (for example during development).
+            Public releases need no token. Use a fine-grained personal access token limited to the one repository with
+            read-only <Italic>Contents</Italic> permission. It is stored in Windows Credential Manager (encrypted for your
+            Windows account), sent only to api.github.com, and never shown or logged.
+        </TextBlock>
+        <TextBlock x:Name="StateText" FontWeight="SemiBold" Margin="0,0,0,10" />
+        <HeaderedContentControl Header="New token" Style="{StaticResource Field}" Margin="0,0,0,12">
+            <PasswordBox x:Name="TokenBox" Padding="4,3" AutomationProperties.Name="GitHub token" />
+        </HeaderedContentControl>
+        <TextBlock x:Name="Feedback" TextWrapping="Wrap" Margin="0,0,0,10" />
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+            <Button x:Name="RemoveButton" Content="Remove stored token" Click="OnRemove" Margin="0,0,8,0" />
+            <Button Content="Save token" Style="{StaticResource AccentButton}" Click="OnSave" Margin="0,0,8,0" />
+            <Button Content="Close" IsCancel="True" />
+        </StackPanel>
+    </StackPanel>
+</Window>

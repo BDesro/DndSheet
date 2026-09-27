@@ -119,6 +119,8 @@ public static class CharacterFactory
         if (def.Caster == CasterType.Pact)
         {
             var (count, slotLevel) = SrdCatalog.PactSlots(level);
+            var existing = c.Resources.FirstOrDefault(r => r.Name.StartsWith("Pact Magic slots", StringComparison.Ordinal));
+            if (existing is not null) c.Resources.Remove(existing);
             c.Resources.Add(new Resource
             {
                 Name = $"Pact Magic slots (level {slotLevel})",
