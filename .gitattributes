@@ -1,4 +1,6 @@
 * text=auto
+# Windows scripts must keep CRLF in release packages regardless of where they're built.
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
 *.png binary
 *.ico binary
-

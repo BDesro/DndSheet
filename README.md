@@ -20,9 +20,15 @@ Characters are stored locally in SQLite, autosaved, backed up daily, and can be 
 
 ## Install (double-click to launch)
 
-**From a release:** download `DndSheet-<version>-win-x64.zip` from the [Releases page](https://github.com/BDesro/DndSheet/releases), unzip it into a folder you own (for example `%LOCALAPPDATA%\Programs\DndSheet`), and run `DndSheet.exe`. Once installed, the app updates itself from new releases.
+**From a release:** download `DndSheet-<version>-win-x64.zip` from the [Releases page](https://github.com/BDesro/DndSheet/releases), extract it, and double-click **`Install.cmd`**. The installer:
 
-**From source:** this builds the app, installs it to `%LOCALAPPDATA%\Programs\DndSheet`, and adds Start Menu and desktop shortcuts:
+1. Checks for the .NET 10 Desktop Runtime. If it's missing, it asks before installing it (through winget, or by opening Microsoft's download page) and re-checks. If the runtime still isn't there, it stops without changing anything.
+2. Copies the app to `%LOCALAPPDATA%\Programs\DndSheet` (no admin rights needed).
+3. Creates Start Menu and desktop shortcuts, then offers to launch the app.
+
+After that, the app updates itself from new releases. Your characters live in `%LOCALAPPDATA%\DndSheet`, so reinstalling never touches them. Installer options: `-NoDesktopShortcut`, `-NoLaunch`, `-InstallDir <path>`.
+
+**From source:** this checks for the .NET 10 SDK (and offers to install it), builds the package, and runs the same installer:
 
 ```bash
 powershell -ExecutionPolicy Bypass -File scripts/install.ps1
@@ -99,3 +105,7 @@ Ctrl+N new character · Ctrl+S save · Ctrl+P print sheet · Ctrl+1/2/3 Sheet/De
 
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): stack choice, layers, domain model, persistence, updates, security, testing, limitations and extension points
 - [NOTICE.md](NOTICE.md): intellectual-property and licensing notes
+
+## License
+
+The code is under the [MIT License](LICENSE). The bundled SRD 5.1 game facts are separately licensed under CC-BY-4.0 (see [NOTICE.md](NOTICE.md)). *Dungeons & Dragons* is a trademark of Wizards of the Coast; this project is unofficial.

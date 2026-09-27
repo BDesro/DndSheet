@@ -33,5 +33,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          $prerelease = if ('${{ github.ref_name }}' -match '-') { '--prerelease' } else { '' }
-          gh release create '${{ github.ref_name }}' artifacts/*.zip artifacts/SHA256SUMS.txt --generate-notes $prerelease
+          $tag = '${{ github.ref_name }}'
+          $args = @($tag, (Get-Item artifacts/*.zip).FullName, 'artifacts/SHA256SUMS.txt', '--title', "DndSheet $tag", '--generate-notes')
+          if ($tag -match '-') { $args += '--prerelease' }
+          gh release create @args

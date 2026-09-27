@@ -23,6 +23,8 @@ if ($LASTEXITCODE) { throw 'App publish failed' }
 dotnet publish "$root/src/DndSheet.Updater" -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true -p:Version=$Version -o $stage
 if ($LASTEXITCODE) { throw 'Updater publish failed' }
 Get-ChildItem $stage -Filter *.pdb | Remove-Item
+# The installer (dependency check + shortcuts) ships inside the package: users run Install.cmd.
+Copy-Item "$root/packaging/*" $stage
 if (Test-Path "$stage/appsettings.Development.json") { throw 'Development settings must never ship in a release package' }
 
 $zipName = "DndSheet-$Version-win-x64.zip"
