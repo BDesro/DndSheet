@@ -62,7 +62,40 @@ dotnet run --project src/DndSheet.App -- --Application:DataDirectory=%TEMP%\dnds
 pwsh ./scripts/publish.ps1
 ```
 
-This produces `artifacts/DndSheet-<version>-win-x64.zip` and `artifacts/SHA256SUMS.txt`. To publish, bump `<Version>` in `Directory.Build.props`, commit, and push a matching tag (`v1.2.0`). The **Release** GitHub Actions workflow tests, packages and creates the GitHub release. Installed copies then offer the update.
+This produces `artifacts/DndSheet-<version>-win-x64.zip` and `artifacts/SHA256SUMS.txt`. Use it to check a package locally; published releases are built by GitHub Actions.
+
+### Releasing a new version
+
+`main` accepts changes only through pull requests with passing CI, and release tags are immutable, so a release is a version-bump PR followed by a tag:
+
+```bash
+git checkout main
+git pull
+git checkout -b release/v1.2.0
+```
+
+Set `<Version>1.2.0</Version>` in `Directory.Build.props`, then:
+
+```bash
+git commit -am "Release 1.2.0"
+git push -u origin release/v1.2.0
+gh pr create --base main --title "Release 1.2.0" --body "Changes: ..."
+```
+
+When CI passes, merge the PR, then tag the merged commit on `main`:
+
+```bash
+gh pr merge --squash --delete-branch
+git checkout main
+git pull
+git tag -a v1.2.0 -m "DndSheet 1.2.0"
+git push origin v1.2.0
+```
+
+The **Release** workflow checks that the tag matches `<Version>`, runs the tests, builds the zip and checksum, and publishes the GitHub release. Watch it with `gh run watch`, or in the repository's Actions tab. Installed copies show an "Update 1.2.0 available" button within a startup or two.
+
+- Use [semantic versions](https://semver.org): patch for fixes, minor for features, major for breaking changes. A tag containing `-` (e.g. `v1.3.0-beta.1`) is published as a pre-release, which only users with `AllowPreRelease` see.
+- If a release is broken, don't move or delete the tag (the ruleset blocks it anyway). Fix forward with the next patch version.
 
 To install: unzip the package into a folder you own, for example `%LOCALAPPDATA%\Programs\DndSheet`, and run `DndSheet.exe`. The app never needs administrator rights.
 
