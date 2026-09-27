@@ -67,7 +67,7 @@
                            Visibility="{Binding IsDevelopmentMode, Converter={StaticResource VisibleWhen}}" />
                 <Button DockPanel.Dock="Right" Margin="0,0,14,0" Padding="10,1" MinHeight="22" Command="{Binding Update.ShowDialog}"
                         Visibility="{Binding Update.IsUpdateAvailable, Converter={StaticResource VisibleWhen}}"
-                        Content="{Binding Update.Available.Version, StringFormat=Update {0} available}" />
+                        Content="{Binding Update.Available.Version}" ContentStringFormat="Update {0} available" />
                 <TextBlock Text="{Binding SaveStatus}" Foreground="{StaticResource InkMuted}" VerticalAlignment="Center" />
             </DockPanel>
         </Border>
