@@ -33,7 +33,7 @@
             </ScrollViewer>
         </Border>
         <TextBlock Text="{Binding Status}" TextWrapping="Wrap" Margin="0,0,0,8" />
-        <ProgressBar Height="6" Maximum="1" Value="{Binding Progress}" Margin="0,0,0,12"
+        <ProgressBar Height="6" Maximum="1" Value="{Binding Progress, Mode=OneWay}" Margin="0,0,0,12"
                      Visibility="{Binding IsBusy, Converter={StaticResource VisibleWhen}}" />
         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
             <Button Content="Check again" Command="{Binding Check}" Margin="0,0,8,0" />
