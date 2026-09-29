@@ -297,6 +297,8 @@ public class RedactionTests
     [InlineData("pat github_pat_11ABCDEFG0123456789_abcdefghijklmnop")]
     [InlineData("Authorization: Bearer abc.def")]
     [InlineData("password=hunter2")]
+    [InlineData("session eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.abcdefghijklmnop")]
+    [InlineData("{\"refresh_token\":\"abcdefghijklmnop\"}")]
     public void SecretsAreRedacted(string text)
     {
         var redacted = SecretRedactor.Redact(text);
