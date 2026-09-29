@@ -1,4 +1,4 @@
-# DndSheet
+# Hearthsheet
 
 A Windows desktop app for playing and managing a Dungeons & Dragons 5th Edition character.
 
@@ -20,13 +20,13 @@ Characters are stored locally in SQLite, autosaved, backed up daily, and can be 
 
 ## Install (double-click to launch)
 
-**From a release:** download `DndSheet-<version>-win-x64.zip` from the [Releases page](https://github.com/BDesro/DndSheet/releases), extract it, and double-click **`Install.cmd`**. The installer:
+**From a release:** download `Hearthsheet-<version>-win-x64.zip` from the [Releases page](https://github.com/BDesro/Hearthsheet/releases), extract it, and double-click **`Install.cmd`**. The installer:
 
 1. Checks for the .NET 10 Desktop Runtime. If it's missing, it asks before installing it (through winget, or by opening Microsoft's download page) and re-checks. If the runtime still isn't there, it stops without changing anything.
-2. Copies the app to `%LOCALAPPDATA%\Programs\DndSheet` (no admin rights needed).
+2. Copies the app to `%LOCALAPPDATA%\Programs\Hearthsheet` (no admin rights needed).
 3. Creates Start Menu and desktop shortcuts, then offers to launch the app.
 
-After that, the app updates itself from new releases. Your characters live in `%LOCALAPPDATA%\DndSheet`, so reinstalling never touches them. Installer options: `-NoDesktopShortcut`, `-NoLaunch`, `-InstallDir <path>`.
+After that, the app updates itself from new releases. Your characters live in `%LOCALAPPDATA%\Hearthsheet`, so reinstalling never touches them. Installer options: `-NoDesktopShortcut`, `-NoLaunch`, `-InstallDir <path>`.
 
 **From source:** this checks for the .NET 10 SDK (and offers to install it), builds the package, and runs the same installer:
 
@@ -37,15 +37,15 @@ powershell -ExecutionPolicy Bypass -File scripts/install.ps1
 ## Build, run, test
 
 ```bash
-dotnet build DndSheet.slnx
+dotnet build Hearthsheet.slnx
 ```
 
 ```bash
-dotnet run --project src/DndSheet.App
+dotnet run --project src/Hearthsheet.App
 ```
 
 ```bash
-dotnet test DndSheet.slnx
+dotnet test Hearthsheet.slnx
 ```
 
 Debug builds start in **development mode**: a diagnostics console window opens next to the app, and logging is verbose. See [Configuration](#configuration).
@@ -53,7 +53,7 @@ Debug builds start in **development mode**: a diagnostics console window opens n
 To keep test data away from your real characters:
 
 ```bash
-dotnet run --project src/DndSheet.App -- --Application:DataDirectory=%TEMP%\dndsheet-dev
+dotnet run --project src/Hearthsheet.App -- --Application:DataDirectory=%TEMP%\hearthsheet-dev
 ```
 
 ## Packaging a release
@@ -62,7 +62,7 @@ dotnet run --project src/DndSheet.App -- --Application:DataDirectory=%TEMP%\dnds
 pwsh ./scripts/publish.ps1
 ```
 
-This produces `artifacts/DndSheet-<version>-win-x64.zip` and `artifacts/SHA256SUMS.txt`. Use it to check a package locally; published releases are built by GitHub Actions.
+This produces `artifacts/Hearthsheet-<version>-win-x64.zip` and `artifacts/SHA256SUMS.txt`. Use it to check a package locally; published releases are built by GitHub Actions.
 
 ### Releasing a new version
 
@@ -88,7 +88,7 @@ When CI passes, merge the PR, then tag the merged commit on `main`:
 gh pr merge --squash --delete-branch
 git checkout main
 git pull
-git tag -a v1.2.0 -m "DndSheet 1.2.0"
+git tag -a v1.2.0 -m "Hearthsheet 1.2.0"
 git push origin v1.2.0
 ```
 
@@ -97,7 +97,7 @@ The **Release** workflow checks that the tag matches `<Version>`, runs the tests
 - Use [semantic versions](https://semver.org): patch for fixes, minor for features, major for breaking changes. A tag containing `-` (e.g. `v1.3.0-beta.1`) is published as a pre-release, which only users with `AllowPreRelease` see.
 - If a release is broken, don't move or delete the tag (the ruleset blocks it anyway). Fix forward with the next patch version.
 
-To install: unzip the package into a folder you own, for example `%LOCALAPPDATA%\Programs\DndSheet`, and run `DndSheet.exe`. The app never needs administrator rights.
+To install: unzip the package into a folder you own, for example `%LOCALAPPDATA%\Programs\Hearthsheet`, and run `Hearthsheet.exe`. The app never needs administrator rights.
 
 ## Configuration
 
@@ -105,14 +105,14 @@ Settings are layered. Later sources override earlier ones, so no binary has to c
 
 1. `appsettings.json` next to the exe (shipped production defaults, `DevelopmentMode: false`)
 2. `appsettings.Development.json` (present only in Debug build output)
-3. `%LOCALAPPDATA%\DndSheet\appsettings.user.json` (per-user overrides; see `appsettings.user.example.json`)
-4. Environment variables prefixed `DNDSHEET_`, e.g. `DNDSHEET_Application__DevelopmentMode=true`
+3. `%LOCALAPPDATA%\Hearthsheet\appsettings.user.json` (per-user overrides; see `appsettings.user.example.json`)
+4. Environment variables prefixed `HEARTHSHEET_`, e.g. `HEARTHSHEET_Application__DevelopmentMode=true`
 5. Command line: `--dev`, or `--Section:Key=value`
 
 | Key | Default | Meaning |
 |---|---|---|
 | `Application:DevelopmentMode` | `false` | Opens a diagnostics console and logs at Debug level. It only affects diagnostics; it unlocks no extra capabilities. |
-| `Application:DataDirectory` | `%LOCALAPPDATA%\DndSheet` | Where the database, logs, backups and update staging live. |
+| `Application:DataDirectory` | `%LOCALAPPDATA%\Hearthsheet` | Where the database, logs, backups and update staging live. |
 | `Application:AutosaveDelaySeconds` | `2` | Idle time after an edit before autosave. |
 | `Logging:FileMinimumLevel` | `Information` | Minimum level written to the log file (Debug in development mode). |
 | `Logging:RetainDays` | `14` | Log file retention. |
@@ -124,11 +124,11 @@ Settings are layered. Later sources override earlier ones, so no binary has to c
 
 | What | Location |
 |---|---|
-| Characters | `%LOCALAPPDATA%\DndSheet\characters.db` (SQLite, WAL mode) |
-| Daily backups (last 10) | `%LOCALAPPDATA%\DndSheet\backups\` |
-| Logs | `%LOCALAPPDATA%\DndSheet\logs\app-YYYYMMDD.log`. In the app: Help → Open log folder |
-| Updater log | `%LOCALAPPDATA%\DndSheet\logs\updater.log` |
-| GitHub token (optional) | Windows Credential Manager → Windows Credentials → `DndSheet/GitHubToken` |
+| Characters | `%LOCALAPPDATA%\Hearthsheet\characters.db` (SQLite, WAL mode) |
+| Daily backups (last 10) | `%LOCALAPPDATA%\Hearthsheet\backups\` |
+| Logs | `%LOCALAPPDATA%\Hearthsheet\logs\app-YYYYMMDD.log`. In the app: Help → Open log folder |
+| Updater log | `%LOCALAPPDATA%\Hearthsheet\logs\updater.log` |
+| GitHub token (optional) | Windows Credential Manager → Windows Credentials → `Hearthsheet/GitHubToken` |
 
 ## Keyboard shortcuts
 

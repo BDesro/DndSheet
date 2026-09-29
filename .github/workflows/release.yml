@@ -22,7 +22,7 @@ jobs:
           $tag = '${{ github.ref_name }}'.TrimStart('v')
           $version = ([xml](Get-Content Directory.Build.props)).Project.PropertyGroup.Version | Select-Object -First 1
           if ($tag -ne $version) { throw "Tag $tag does not match Directory.Build.props version $version" }
-      - run: dotnet test DndSheet.slnx -c Release
+      - run: dotnet test Hearthsheet.slnx -c Release
       - name: Package
         shell: pwsh
         run: |
@@ -34,6 +34,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           $tag = '${{ github.ref_name }}'
-          $args = @($tag, (Get-Item artifacts/*.zip).FullName, 'artifacts/SHA256SUMS.txt', '--title', "DndSheet $tag", '--generate-notes')
+          $args = @($tag, (Get-Item artifacts/*.zip).FullName, 'artifacts/SHA256SUMS.txt', '--title', "Hearthsheet $tag", '--generate-notes')
           if ($tag -match '-') { $args += '--prerelease' }
           gh release create @args

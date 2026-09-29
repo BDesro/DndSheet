@@ -1,17 +1,17 @@
 # Intellectual property notes
 
-DndSheet is an unofficial fan tool. It is not affiliated with, endorsed or sponsored by Wizards of the Coast. *Dungeons & Dragons* and *D&D* are trademarks of Wizards of the Coast LLC.
+Hearthsheet is an unofficial fan tool. It is not affiliated with, endorsed or sponsored by Wizards of the Coast. *Dungeons & Dragons* and *D&D* are trademarks of Wizards of the Coast LLC.
 
 ## What the app contains
 
-- **Mechanical facts from the System Reference Document 5.1 (SRD 5.1).** These are class names, hit dice, saving-throw proficiencies, spellcasting abilities, spell-slot progression tables, the standard skills and conditions, and species and alignment names (`src/DndSheet.Core/Content/SrdCatalog.cs`, `Domain/Enums.cs`).
+- **Mechanical facts from the System Reference Document 5.1 (SRD 5.1).** These are class names, hit dice, saving-throw proficiencies, spellcasting abilities, spell-slot progression tables, the standard skills and conditions, and species and alignment names (`src/Hearthsheet.Core/Content/SrdCatalog.cs`, `Domain/Enums.cs`).
   This work includes material taken from the System Reference Document 5.1 ("SRD 5.1") by Wizards of the Coast LLC, available at <https://dnd.wizards.com/resources/systems-reference-document>. The SRD 5.1 is licensed under the Creative Commons Attribution 4.0 International License, available at <https://creativecommons.org/licenses/by/4.0/legalcode>.
 - **Rules computed in code:** modifiers, proficiency bonus, death saves, rests. The rules themselves (as opposed to their expression in text) are implemented from their mechanics, and no rules text is reproduced.
 
 ## What it deliberately does not contain
 
 - **No rulebook text.** It has no spell, feat, class-feature or monster descriptions. Spell and feature description fields are empty until the player types in their own notes. The UI's short helper phrases are original wording.
-- **The app icon is original artwork** (a red d20 on black, `src/DndSheet.App/Assets/DndSheet.ico`). The official D&D ampersand logo is a Wizards of the Coast trademark and is intentionally not used.
+- **The app icon is original artwork** (a red d20 on black, `src/Hearthsheet.App/Assets/Hearthsheet.ico`). The official D&D ampersand logo is a Wizards of the Coast trademark and is intentionally not used.
 - **No official artwork, logos, fonts or character-sheet PDF.** The sheet view is an original layout that follows the *organization* of the familiar 5e sheet (where boxes are and what they hold), drawn with standard WPF controls. It does not trace or embed the official PDF.
 
 ## If content is added later

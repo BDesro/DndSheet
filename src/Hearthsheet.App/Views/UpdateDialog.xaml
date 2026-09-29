@@ -1,0 +1,44 @@
+<Window x:Class="Hearthsheet.App.Views.UpdateDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Updates" Style="{StaticResource AppWindow}" Width="520" SizeToContent="Height"
+        ResizeMode="NoResize" WindowStartupLocation="CenterOwner" ShowInTaskbar="False">
+    <StackPanel Margin="22,18">
+        <TextBlock Style="{StaticResource SectionTitle}" Text="Application updates" />
+        <TextBlock Style="{StaticResource Hint}"
+                   Text="Updates come from versioned GitHub releases. Each package is checked against the release's SHA-256 checksum before it is installed; if installing fails, the previous version is restored." />
+        <Grid Margin="0,0,0,12">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="130" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <Grid.RowDefinitions>
+                <RowDefinition /><RowDefinition /><RowDefinition />
+            </Grid.RowDefinitions>
+            <TextBlock Text="Installed version" Foreground="{StaticResource InkMuted}" />
+            <TextBlock Grid.Column="1" Text="{Binding CurrentVersion}" FontWeight="SemiBold" />
+            <TextBlock Grid.Row="1" Text="Release source" Foreground="{StaticResource InkMuted}" Margin="0,4,0,0" />
+            <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding Source}" Margin="0,4,0,0" />
+            <TextBlock Grid.Row="2" Text="Available" Foreground="{StaticResource InkMuted}" Margin="0,4,0,0" />
+            <TextBlock Grid.Row="2" Grid.Column="1" Margin="0,4,0,0" FontWeight="SemiBold"
+                       Text="{Binding Available.Version, FallbackValue='—', TargetNullValue='—'}" />
+        </Grid>
+        <Border Style="{StaticResource Card}" Margin="0,0,0,12" MaxHeight="220"
+                Visibility="{Binding IsUpdateAvailable, Converter={StaticResource VisibleWhen}}">
+            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <StackPanel>
+                    <TextBlock Text="{Binding Available.Name}" FontWeight="SemiBold" Margin="0,0,0,4" />
+                    <TextBlock Text="{Binding Available.Notes}" TextWrapping="Wrap" />
+                </StackPanel>
+            </ScrollViewer>
+        </Border>
+        <TextBlock Text="{Binding Status}" TextWrapping="Wrap" Margin="0,0,0,8" />
+        <ProgressBar Height="6" Maximum="1" Value="{Binding Progress, Mode=OneWay}" Margin="0,0,0,12"
+                     Visibility="{Binding IsBusy, Converter={StaticResource VisibleWhen}}" />
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+            <Button Content="Check again" Command="{Binding Check}" Margin="0,0,8,0" />
+            <Button Content="Download &amp; install" Style="{StaticResource AccentButton}" Command="{Binding Install}" Margin="0,0,8,0" />
+            <Button Content="Close" IsCancel="True" />
+        </StackPanel>
+    </StackPanel>
+</Window>
