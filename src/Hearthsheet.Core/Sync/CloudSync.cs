@@ -78,7 +78,7 @@ public sealed class CloudSync(
         {
             // The user moved on to another character meanwhile: apply with the normal dirty guard.
             if (change.Remote is null) local.ApplyRemoteDelete(change.Id);
-            else local.ApplyRemote(change.Remote, change.Revision);
+            else local.ApplyRemote(change.Remote, change.Revision, ifLocalRevision: change.CopiedLocalRevision);
             return null;
         }
 
@@ -148,8 +148,11 @@ public sealed class CloudSync(
             {
                 // False means the row is gone or was edited elsewhere. Either way this delete is finished:
                 // a newer remote edit wins and comes back with the pull.
-                await cloud.TombstoneIfRevisionAsync(pending.Id, pending.CloudRevision, ct);
+                var deleted = await cloud.TombstoneIfRevisionAsync(pending.Id, pending.CloudRevision, ct);
                 local.ClearPendingDelete(pending.Id);
+                if (!deleted && await cloud.GetAsync(pending.Id, ct) is { IsDeleted: false } row
+                    && TryRead(row, pass, out var character) && local.ApplyRemote(character, row.Revision))
+                    pass.Changed.Add(pending.Id); // the edit that beat this delete may be older than the pull cursor
             }
             catch (CloudRequestException ex)
             {
@@ -218,6 +221,8 @@ public sealed class CloudSync(
         var rows = await cloud.ChangedSinceAsync(full ? null : lastPull - PullOverlap, ct);
         var known = local.GetCloudRevisions();
         DateTimeOffset? heldAt = null;
+        // Keep the cursor at the oldest row not applied yet (unreadable, or deferred and possibly never applied).
+        void Hold(DateTimeOffset at) { if (heldAt is null || at < heldAt) heldAt = at; }
 
         foreach (var row in rows)
         {
@@ -226,15 +231,20 @@ public sealed class CloudSync(
             if (row.IsDeleted)
             {
                 if (!known.ContainsKey(row.Id)) continue;
-                if (isOpen) pass.Deferred.Add(new DeferredChange(row.Id, null, row.Revision));
+                if (isOpen) { pass.Deferred.Add(new DeferredChange(row.Id, null, row.Revision)); Hold(row.UpdatedAt); }
                 else if (local.ApplyRemoteDelete(row.Id)) pass.Deleted.Add(row.Id);
                 continue;
             }
             // Keep the cursor at the oldest row this version can't read yet, so an app update picks it up.
-            if (row.SchemaVersion > CharacterJson.CurrentSchemaVersion && (heldAt is null || row.UpdatedAt < heldAt))
-                heldAt = row.UpdatedAt;
+            if (row.SchemaVersion > CharacterJson.CurrentSchemaVersion) Hold(row.UpdatedAt);
             if (!TryRead(row, pass, out var character)) continue;
-            if (isOpen) pass.Deferred.Add(new DeferredChange(row.Id, character, row.Revision));
+            if (isOpen)
+            {
+                // A conflict on the open character already deferred this exact revision, with its copy recorded.
+                if (!pass.Deferred.Exists(d => d.Id == row.Id && d.Revision == row.Revision))
+                    pass.Deferred.Add(new DeferredChange(row.Id, character, row.Revision));
+                Hold(row.UpdatedAt);
+            }
             else if (local.ApplyRemote(character, row.Revision)) pass.Changed.Add(row.Id);
         }
 

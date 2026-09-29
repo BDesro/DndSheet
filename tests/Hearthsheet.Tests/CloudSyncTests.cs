@@ -452,4 +452,66 @@ public class CloudSyncTests : IDisposable
         Assert.Equal(upload ? 1 : 0, _cloud.Rows.Count);
         Assert.Equal("user-2", _a.Sync.LinkedAccount);
     }
+
+    // ---- Lost changes ----
+
+    [Fact]
+    public async Task DeferredChange_NeverApplied_IsPulledAgainOnALaterPass()
+    {
+        var c = await SyncedToBoth();
+        _cloud.EditRemotely(c.Id, x => x.Identity.Name = "Remote");
+        _a.OpenId = c.Id;
+        Assert.Single((await _a.SyncAsync()).Deferred);
+        Assert.Equal("Arannis", _a.NameOf(c.Id));
+
+        _time.Now += TimeSpan.FromMinutes(10);
+        _b.Add("Other");
+        await _b.SyncAsync();
+        Assert.Single((await _a.SyncAsync()).Deferred); // the change is still waiting, the cursor must not pass it
+
+        _a.OpenId = null;
+        await _a.SyncAsync();
+        Assert.Equal("Remote", _a.NameOf(c.Id));
+    }
+
+    [Fact]
+    public async Task LocalDelete_LosingToAnEditOlderThanThePullCursor_RestoresTheCharacter()
+    {
+        var c = await SyncedToBoth();
+        _cloud.Gate = new TaskCompletionSource();
+        var gate = _cloud.Gate;
+        var first = _a.SyncAsync(); // parks inside the pull, after its push
+        _cloud.Gate = null;
+        _a.Rename(c.Id, "A-name"); // dirty now, so the pull will skip the remote edit
+        _b.Rename(c.Id, "B-name");
+        await _b.SyncAsync();
+        _time.Now += TimeSpan.FromMinutes(10);
+        _b.Add("Other");
+        await _b.SyncAsync(); // moves the cursor well past the edit
+        gate.SetResult();
+        await first;
+
+        _a.Repo.Delete(c.Id);
+        await _a.SyncAsync();
+        Assert.False(_cloud.Rows[c.Id].IsDeleted);
+        Assert.Equal("B-name", _a.NameOf(c.Id));
+    }
+
+    [Fact]
+    public async Task ApplyDeferred_AfterSwitchingAway_DoesNotDuplicateTheConflictCopy()
+    {
+        var c = await SyncedToBoth();
+        _b.Rename(c.Id, "B-name");
+        await _b.SyncAsync();
+        _a.Rename(c.Id, "A-name");
+        _a.OpenId = c.Id;
+        var change = Assert.Single((await _a.SyncAsync()).Deferred);
+
+        _a.Sync.ApplyDeferred(change, null, hasUnsavedChanges: false);
+        _a.OpenId = null;
+        await _a.SyncAsync();
+
+        Assert.Single(_a.Repo.List(), s => s.Name.Contains("(conflict copy, ", StringComparison.Ordinal));
+        Assert.Equal("B-name", _a.NameOf(c.Id));
+    }
 }
