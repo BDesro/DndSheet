@@ -15,5 +15,5 @@ jobs:
       - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: 10.0.x
-      - run: dotnet build DndSheet.slnx -c Release
-      - run: dotnet test DndSheet.slnx -c Release --no-build
+      - run: dotnet build Hearthsheet.slnx -c Release
+      - run: dotnet test Hearthsheet.slnx -c Release --no-build

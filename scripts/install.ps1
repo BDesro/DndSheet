@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-  Builds DndSheet from source and installs it for the current user (Start Menu + desktop shortcuts).
+  Builds Hearthsheet from source and installs it for the current user (Start Menu + desktop shortcuts).
   Checks for the .NET 10 SDK (needed to build) first and offers to install it; the packaged installer
   then checks for the .NET 10 Desktop Runtime (needed to run).
 .EXAMPLE
@@ -8,7 +8,7 @@
   powershell -ExecutionPolicy Bypass -File scripts/install.ps1 -NoDesktopShortcut
 #>
 param(
-    [string]$InstallDir = (Join-Path $env:LOCALAPPDATA 'Programs\DndSheet'),
+    [string]$InstallDir = (Join-Path $env:LOCALAPPDATA 'Programs\Hearthsheet'),
     [switch]$NoDesktopShortcut,
     [switch]$NoLaunch
 )
@@ -23,5 +23,5 @@ $sdkOk = Confirm-Dependency -Name '.NET 10 SDK' `
 if (-not $sdkOk) { Write-Host 'Build cancelled: the .NET 10 SDK is required.'; exit 1 }
 
 & "$PSScriptRoot/publish.ps1"
-& (Join-Path $root 'artifacts/publish/DndSheet/Install.ps1') -InstallDir $InstallDir -NoDesktopShortcut:$NoDesktopShortcut -NoLaunch:$NoLaunch
+& (Join-Path $root 'artifacts/publish/Hearthsheet/Install.ps1') -InstallDir $InstallDir -NoDesktopShortcut:$NoDesktopShortcut -NoLaunch:$NoLaunch
 exit $LASTEXITCODE

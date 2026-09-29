@@ -28,21 +28,21 @@ MAUI has no real Windows advantage over WPF.
 
 ```text
 src/
-  DndSheet.Core            Domain + application layer. No UI, no I/O besides file import/export.
+  Hearthsheet.Core            Domain + application layer. No UI, no I/O besides file import/export.
     Domain/                Character aggregate and its parts; gameplay operations
     Rules/                 Derived values (CharacterRules) and rest steps (RestService)
     Application/           CharacterSession (change tracking), CharacterLibrary (use cases), ICharacterRepository
     Serialization/         JSON format, schema migrations, portable .dndchar files
     Content/               SRD 5.1 facts: class table, spell-slot progressions, CharacterFactory
-  DndSheet.Infrastructure  Windows / I/O concerns
+  Hearthsheet.Infrastructure  Windows / I/O concerns
     Persistence/           SqliteCharacterRepository
     Logging/               ILoggerProvider with console + rolling-file sinks, secret redaction
     Security/              Windows Credential Manager secret store
     Updates/               SemVersion, GitHub release source, UpdateService
     AppPaths.cs            Per-user data locations, daily database backup
-  DndSheet.Updater         Tiny console exe that swaps the install folder after the app exits
-  DndSheet.App             WPF presentation: views, view models, dialogs, composition root
-tests/DndSheet.Tests       xUnit: domain, rests, persistence, migration, import/export, updates, installer
+  Hearthsheet.Updater         Tiny console exe that swaps the install folder after the app exits
+  Hearthsheet.App             WPF presentation: views, view models, dialogs, composition root
+tests/Hearthsheet.Tests       xUnit: domain, rests, persistence, migration, import/export, updates, installer
 ```
 
 Dependencies point inward: App → Infrastructure → Core. Core has no reference to WPF, SQLite or the network, so all rules are unit-testable.
@@ -154,13 +154,13 @@ Import treats the file as untrusted:
 
 ```text
 git tag vX.Y.Z → Release workflow (tests, scripts/publish.ps1, gh release create with GITHUB_TOKEN)
-   → GitHub Release: DndSheet-X.Y.Z-win-x64.zip + SHA256SUMS.txt
+   → GitHub Release: Hearthsheet-X.Y.Z-win-x64.zip + SHA256SUMS.txt
    → App: UpdateService.CheckAsync   (GET api.github.com/repos/{owner}/{repo}/releases; newest non-draft, stable unless pre-release allowed)
    → user confirms; character saved
    → DownloadAndStageAsync           (download via asset API; size caps; SHA-256 must match SHA256SUMS; zip extracted with zip-slip protection;
-                                      staged DndSheet.dll ProductVersion must equal the release version)
-   → LaunchInstaller                 (copies DndSheet.Updater.exe out of the install folder, starts it, app exits)
-   → DndSheet.Updater                (waits for the app's PID → backs up install folder → replaces it → on any failure restores the backup → restarts the app)
+                                      staged Hearthsheet.dll ProductVersion must equal the release version)
+   → LaunchInstaller                 (copies Hearthsheet.Updater.exe out of the install folder, starts it, app exits)
+   → Hearthsheet.Updater                (waits for the app's PID → backs up install folder → replaces it → on any failure restores the backup → restarts the app)
 ```
 
 - No `git pull` and no developer credentials in the shipped app. For a **public** repository the update path needs no token.
@@ -172,7 +172,7 @@ git tag vX.Y.Z → Release workflow (tests, scripts/publish.ps1, gh release crea
 
 - The `ILogger` abstraction feeds `AppLoggerProvider`, which writes to a rolling daily file (always) and a colored console (development mode only). Line format: `[HH:mm:ss.fff] [LEVEL] [Category] message`.
 - Logged events include app lifecycle, config/data paths, database init and backup, character load/save/create/delete/import/export, every gameplay action, view opens, update checks/downloads/verification, and all errors with stack traces.
-- **Development mode vs build configuration** are independent. Debug builds include `appsettings.Development.json` (`DevelopmentMode: true`), and release packages exclude it (the publish script fails if it's present). A release install can still enable diagnostics per user (`appsettings.user.json`, `DNDSHEET_Application__DevelopmentMode=true` or `--dev`) without a different binary. Development mode only changes logging; it grants nothing else.
+- **Development mode vs build configuration** are independent. Debug builds include `appsettings.Development.json` (`DevelopmentMode: true`), and release packages exclude it (the publish script fails if it's present). A release install can still enable diagnostics per user (`appsettings.user.json`, `HEARTHSHEET_Application__DevelopmentMode=true` or `--dev`) without a different binary. Development mode only changes logging; it grants nothing else.
 - **Crash handling.** UI-thread exceptions are logged and shown as a friendly message while the app keeps running; the model stays consistent because operations are small and data is autosaved. Unobserved task and AppDomain exceptions are logged. Startup failures show where the log is.
 
 ## 11. Security summary
@@ -205,7 +205,7 @@ git tag vX.Y.Z → Release workflow (tests, scripts/publish.ps1, gh release crea
 - **Installer:** replace, rollback on mid-copy failure, refusing an invalid staging folder, argument validation.
 - **Logging:** secret redaction.
 
-The UI was verified by driving the running app through Windows UI Automation. The installer was verified end to end by upgrading a published 1.0.0 package to 1.0.1 with the real `DndSheet.Updater.exe`.
+The UI was verified by driving the running app through Windows UI Automation. The installer was verified end to end by upgrading a published 1.0.0 package to 1.0.1 with the real `Hearthsheet.Updater.exe`.
 
 ## 14. Known limitations
 

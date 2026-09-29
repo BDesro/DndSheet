@@ -1,0 +1,356 @@
+<UserControl x:Class="Hearthsheet.App.Views.PlayView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:Hearthsheet.App.ViewModels"
+             xmlns:domain="clr-namespace:Hearthsheet.Core.Domain;assembly=Hearthsheet.Core">
+    <!-- Session dashboard. Every button is a PlayViewModel command that calls domain logic. -->
+    <UserControl.Resources>
+        <Style x:Key="Stat" TargetType="StackPanel">
+            <Setter Property="Margin" Value="0,0,18,0" />
+        </Style>
+        <Style x:Key="StatValue" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="22" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+        </Style>
+        <Style x:Key="StatLabel" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="Foreground" Value="{StaticResource InkMuted}" />
+        </Style>
+        <Style x:Key="Chip" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="MinWidth" Value="44" />
+            <Setter Property="Margin" Value="0,0,6,6" />
+            <Setter Property="Padding" Value="8,4" />
+        </Style>
+        <Style x:Key="QuickAdd" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="Margin" Value="0,0,6,6" />
+            <Setter Property="HorizontalContentAlignment" Value="Left" />
+        </Style>
+    </UserControl.Resources>
+
+    <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="18,16,6,16" Focusable="False">
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="1.15*" MinWidth="320" />
+                <ColumnDefinition Width="1*" MinWidth="280" />
+                <ColumnDefinition Width="1*" MinWidth="280" />
+            </Grid.ColumnDefinitions>
+
+            <!-- Column 1: hit points, defenses, rest -->
+            <StackPanel>
+                <Border Style="{StaticResource Card}">
+                    <StackPanel>
+                        <DockPanel>
+                            <TextBlock Style="{StaticResource CardTitle}" Text="HIT POINTS" />
+                            <TextBlock DockPanel.Dock="Right" HorizontalAlignment="Right" Text="{Binding VitalStatus}" FontWeight="Bold" Foreground="{StaticResource Danger}" />
+                        </DockPanel>
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock FontSize="40" FontWeight="SemiBold" Text="{Binding Character.Combat.CurrentHp}" AutomationProperties.Name="Current hit points" />
+                            <TextBlock FontSize="24" Foreground="{StaticResource InkMuted}" VerticalAlignment="Bottom" Margin="6,0,0,6" Text="{Binding MaxHitPoints, StringFormat=/ {0}}" />
+                            <Border Background="{StaticResource AccentSoft}" CornerRadius="10" Padding="8,2" Margin="12,0,0,8" VerticalAlignment="Bottom"
+                                    Visibility="{Binding Character.Combat.TemporaryHp, Converter={StaticResource VisibleWhen}}">
+                                <TextBlock Foreground="{StaticResource Accent}" FontWeight="SemiBold" Text="{Binding Character.Combat.TemporaryHp, StringFormat=+{0} temp}" />
+                            </Border>
+                        </StackPanel>
+                        <WrapPanel Margin="0,8,0,0">
+                            <Button Style="{StaticResource Chip}" Content="−5" Command="{Binding Play.Damage}" CommandParameter="5" ToolTip="Take 5 damage (temp HP first)" AutomationProperties.Name="Take 5 damage" />
+                            <Button Style="{StaticResource Chip}" Content="−1" Command="{Binding Play.Damage}" CommandParameter="1" ToolTip="Take 1 damage" AutomationProperties.Name="Take 1 damage" />
+                            <Button Style="{StaticResource Chip}" Content="+1" Command="{Binding Play.Heal}" CommandParameter="1" ToolTip="Heal 1" AutomationProperties.Name="Heal 1" />
+                            <Button Style="{StaticResource Chip}" Content="+5" Command="{Binding Play.Heal}" CommandParameter="5" ToolTip="Heal 5" AutomationProperties.Name="Heal 5" />
+                        </WrapPanel>
+                        <DockPanel Margin="0,4,0,0">
+                            <TextBox Width="64" DockPanel.Dock="Left" HorizontalContentAlignment="Center" Margin="0,0,6,6" FontSize="15"
+                                     Text="{Binding Play.HpInput, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="Amount" />
+                            <WrapPanel>
+                                <Button Style="{StaticResource Chip}" Content="Damage" Command="{Binding Play.Damage}" />
+                                <Button Style="{StaticResource Chip}" Content="Heal" Command="{Binding Play.Heal}" />
+                                <Button Style="{StaticResource Chip}" Content="Set HP" Command="{Binding Play.SetHp}" />
+                                <Button Style="{StaticResource Chip}" Content="Temp HP" Command="{Binding Play.AddTempHp}" ToolTip="Grant temporary HP (doesn't stack: keeps the higher value)" />
+                            </WrapPanel>
+                        </DockPanel>
+
+                        <!-- Death saves appear only while at 0 HP -->
+                        <Border Margin="0,8,0,0" Padding="10,8" CornerRadius="6" Background="#FBEFED"
+                                Visibility="{Binding IsDying, Converter={StaticResource VisibleWhen}}">
+                            <StackPanel>
+                                <TextBlock FontWeight="SemiBold" Foreground="{StaticResource Danger}" Margin="0,0,0,6">
+                                    <Run Text="Death saves —" />
+                                    <Run Text="{Binding Character.Combat.DeathSaveSuccesses, Mode=OneWay}" /><Run Text=" successes," />
+                                    <Run Text="{Binding Character.Combat.DeathSaveFailures, Mode=OneWay}" /><Run Text=" failures" />
+                                </TextBlock>
+                                <WrapPanel>
+                                    <Button Style="{StaticResource Chip}" Content="Success" Command="{Binding Play.DeathSave}" CommandParameter="{x:Static domain:DeathSaveResult.Success}" />
+                                    <Button Style="{StaticResource Chip}" Content="Failure" Command="{Binding Play.DeathSave}" CommandParameter="{x:Static domain:DeathSaveResult.Failure}" />
+                                    <Button Style="{StaticResource Chip}" Content="Natural 20" Command="{Binding Play.DeathSave}" CommandParameter="{x:Static domain:DeathSaveResult.CriticalSuccess}" />
+                                    <Button Style="{StaticResource Chip}" Content="Natural 1" Command="{Binding Play.DeathSave}" CommandParameter="{x:Static domain:DeathSaveResult.CriticalFailure}" />
+                                </WrapPanel>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </Border>
+
+                <Border Style="{StaticResource Card}">
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource CardTitle}" Text="AT A GLANCE" />
+                        <WrapPanel>
+                            <StackPanel Style="{StaticResource Stat}"><TextBlock Style="{StaticResource StatValue}" Text="{Binding ArmorClass}" /><TextBlock Style="{StaticResource StatLabel}" Text="Armor class" /></StackPanel>
+                            <StackPanel Style="{StaticResource Stat}"><TextBlock Style="{StaticResource StatValue}" Text="{Binding Initiative, Converter={StaticResource Mod}}" /><TextBlock Style="{StaticResource StatLabel}" Text="Initiative" /></StackPanel>
+                            <StackPanel Style="{StaticResource Stat}"><TextBlock Style="{StaticResource StatValue}" Text="{Binding Speed}" /><TextBlock Style="{StaticResource StatLabel}" Text="Speed" /></StackPanel>
+                            <StackPanel Style="{StaticResource Stat}"><TextBlock Style="{StaticResource StatValue}" Text="{Binding PassivePerception}" /><TextBlock Style="{StaticResource StatLabel}" Text="Passive Perc." /></StackPanel>
+                            <StackPanel Style="{StaticResource Stat}"><TextBlock Style="{StaticResource StatValue}" Text="{Binding ProficiencyBonus, Converter={StaticResource Mod}}" /><TextBlock Style="{StaticResource StatLabel}" Text="Proficiency" /></StackPanel>
+                        </WrapPanel>
+                        <ToggleButton Style="{StaticResource PillToggle}" Margin="0,10,0,0" HorizontalAlignment="Left"
+                                      IsChecked="{Binding Character.Identity.Inspiration, Mode=OneWay}" Command="{Binding Play.ToggleInspiration}"
+                                      Content="★ Inspiration" AutomationProperties.Name="Inspiration" />
+                    </StackPanel>
+                </Border>
+
+                <Border Style="{StaticResource Card}">
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource CardTitle}" Text="REST" />
+                        <TextBlock Margin="0,0,0,8" Foreground="{StaticResource InkMuted}">
+                            <Run Text="Hit dice:" /> <Run Text="{Binding HitDiceText, Mode=OneWay}" FontWeight="SemiBold" Foreground="{StaticResource Ink}" />
+                        </TextBlock>
+                        <UniformGrid Columns="2">
+                            <Button Content="Short Rest…" Margin="0,0,6,0" Command="{Binding Play.ShortRest}" ToolTip="Spend hit dice, then recover short-rest resources" />
+                            <Button Content="Long Rest" Style="{StaticResource AccentButton}" Command="{Binding Play.LongRest}" />
+                        </UniformGrid>
+                    </StackPanel>
+                </Border>
+
+                <Border Style="{StaticResource Card}">
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource CardTitle}" Text="QUICK ADD" />
+                        <UniformGrid Columns="2">
+                            <Button Style="{StaticResource QuickAdd}" Content="+ Item" Command="{Binding Play.QuickAddItem}" />
+                            <Button Style="{StaticResource QuickAdd}" Content="+ Feature" Command="{Binding Play.QuickAddFeature}" />
+                            <Button Style="{StaticResource QuickAdd}" Content="+ Trait" Command="{Binding Play.QuickAddFeature}" CommandParameter="Trait" />
+                            <Button Style="{StaticResource QuickAdd}" Content="+ Proficiency" Command="{Binding Play.QuickAddProficiency}" />
+                            <Button Style="{StaticResource QuickAdd}" Content="+ Spell" Command="{Binding Play.QuickAddSpell}" />
+                            <Button Style="{StaticResource QuickAdd}" Content="+ Effect" Command="{Binding Play.QuickAddEffect}" />
+                            <Button Style="{StaticResource QuickAdd}" Content="+ Resource" Command="{Binding Play.QuickAddResource}" />
+                        </UniformGrid>
+                        <TextBlock Style="{StaticResource Hint}" Margin="0,4,0,0" FontSize="11.5"
+                                   Text="Full editing (weights, modifiers, spell details) is in the Details view." />
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+
+            <!-- Column 2: resources, spell slots, prepared spells -->
+            <StackPanel Grid.Column="1">
+                <Border Style="{StaticResource Card}">
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource CardTitle}" Text="RESOURCES" />
+                        <TextBlock Style="{StaticResource Hint}" Margin="0" Text="No tracked resources yet. Add one with Quick add → Resource."
+                                   Visibility="{Binding Character.Resources.Count, Converter={StaticResource VisibleWhen}, ConverterParameter=Invert}" />
+                        <ItemsControl ItemsSource="{Binding Character.Resources}" IsTabStop="False">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate DataType="{x:Type domain:Resource}">
+                                    <Grid Margin="0,0,0,6">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel VerticalAlignment="Center">
+                                            <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                                            <TextBlock FontSize="11" Foreground="{StaticResource InkMuted}" Text="{Binding Recovery, Converter={StaticResource EnumDisplay}}" />
+                                        </StackPanel>
+                                        <TextBlock Grid.Column="1" VerticalAlignment="Center" Margin="8,0" FontSize="16">
+                                            <Run Text="{Binding Current, Mode=OneWay}" FontWeight="SemiBold" /><Run Text=" / " Foreground="{StaticResource InkMuted}" /><Run Text="{Binding Maximum, Mode=OneWay}" Foreground="{StaticResource InkMuted}" />
+                                        </TextBlock>
+                                        <StackPanel Grid.Column="2" Orientation="Horizontal">
+                                            <Button Content="Use" Margin="0,0,4,0" Padding="10,3"
+                                                    Command="{Binding DataContext.Play.UseResource, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding}"
+                                                    AutomationProperties.Name="{Binding Name, StringFormat=Use {0}}" />
+                                            <Button Content="+" Width="30" Padding="0"
+                                                    Command="{Binding DataContext.Play.RestoreResource, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding}"
+                                                    AutomationProperties.Name="{Binding Name, StringFormat=Restore one {0}}" />
+                                        </StackPanel>
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </Border>
+
+                <Border Style="{StaticResource Card}" Visibility="{Binding HasSpellcasting, Converter={StaticResource VisibleWhen}}">
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource CardTitle}" Text="SPELL SLOTS" />
+                        <TextBlock Foreground="{StaticResource InkMuted}" Margin="0,0,0,8">
+                            <Run Text="Save DC" /> <Run Text="{Binding SpellSaveDc, Mode=OneWay}" FontWeight="SemiBold" Foreground="{StaticResource Ink}" />
+                            <Run Text="  ·  Attack" /> <Run Text="{Binding SpellAttackBonus, Mode=OneWay}" FontWeight="SemiBold" Foreground="{StaticResource Ink}" />
+                        </TextBlock>
+                        <ItemsControl ItemsSource="{Binding SpellLevels}" IsTabStop="False">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate DataType="{x:Type vm:SpellLevelRow}">
+                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,4" Visibility="{Binding Slot.Maximum, Converter={StaticResource VisibleWhen}, FallbackValue=Collapsed}">
+                                        <TextBlock Text="{Binding Level, StringFormat=Level {0}}" Width="56" VerticalAlignment="Center" />
+                                        <ItemsControl ItemsSource="{Binding Pips}" IsTabStop="False">
+                                            <ItemsControl.ItemsPanel>
+                                                <ItemsPanelTemplate><StackPanel Orientation="Horizontal" /></ItemsPanelTemplate>
+                                            </ItemsControl.ItemsPanel>
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate DataType="{x:Type vm:SlotPip}">
+                                                    <Button Command="{Binding DataContext.Play.ToggleSlot, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding}"
+                                                            Width="22" Height="22" Margin="0,0,4,0" Padding="0" MinHeight="0" ToolTip="Click to expend or restore a slot"
+                                                            AutomationProperties.Name="{Binding Level, StringFormat=Level {0} spell slot}">
+                                                        <Button.Template>
+                                                            <ControlTemplate TargetType="Button">
+                                                                <Ellipse x:Name="Pip" Fill="{StaticResource Accent}" Stroke="{StaticResource Accent}" StrokeThickness="2" />
+                                                                <ControlTemplate.Triggers>
+                                                                    <DataTrigger Binding="{Binding IsExpended}" Value="True">
+                                                                        <Setter TargetName="Pip" Property="Fill" Value="Transparent" />
+                                                                        <Setter TargetName="Pip" Property="Stroke" Value="{StaticResource LineStrong}" />
+                                                                    </DataTrigger>
+                                                                    <Trigger Property="IsMouseOver" Value="True">
+                                                                        <Setter TargetName="Pip" Property="StrokeThickness" Value="3" />
+                                                                    </Trigger>
+                                                                    <Trigger Property="IsKeyboardFocused" Value="True">
+                                                                        <Setter TargetName="Pip" Property="StrokeThickness" Value="3" />
+                                                                    </Trigger>
+                                                                </ControlTemplate.Triggers>
+                                                            </ControlTemplate>
+                                                        </Button.Template>
+                                                    </Button>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <DockPanel Margin="0,8,0,0" Visibility="{Binding Character.Spellcasting.Concentration, Converter={StaticResource VisibleWhen}}">
+                            <Button DockPanel.Dock="Right" Content="Drop" Command="{Binding Play.DropConcentration}" />
+                            <TextBlock VerticalAlignment="Center" TextTrimming="CharacterEllipsis">
+                                <Run Text="Concentrating on" Foreground="{StaticResource InkMuted}" />
+                                <Run Text="{Binding Character.Spellcasting.Concentration, Mode=OneWay}" FontWeight="SemiBold" />
+                            </TextBlock>
+                        </DockPanel>
+                    </StackPanel>
+                </Border>
+
+                <Border Style="{StaticResource Card}" Visibility="{Binding HasSpellcasting, Converter={StaticResource VisibleWhen}}">
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource CardTitle}" Text="PREPARED SPELLS &amp; CANTRIPS" />
+                        <TextBlock Style="{StaticResource Hint}" Margin="0" Text="Mark spells as prepared in the sheet or Details view to see them here." />
+                        <ItemsControl ItemsSource="{Binding Play.PreparedSpells}" IsTabStop="False" Margin="0,6,0,0">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate DataType="{x:Type domain:Spell}">
+                                    <DockPanel Margin="0,0,0,4">
+                                        <Button DockPanel.Dock="Right" Content="Cast" Padding="10,2"
+                                                Command="{Binding DataContext.Play.CastSpell, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding}"
+                                                AutomationProperties.Name="{Binding Name, StringFormat=Cast {0}}" />
+                                        <Button DockPanel.Dock="Right" Content="Ritual" Padding="8,2" Margin="0,0,4,0"
+                                                Visibility="{Binding Ritual, Converter={StaticResource VisibleWhen}}"
+                                                Command="{Binding DataContext.Play.CastRitual, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding}" />
+                                        <TextBlock VerticalAlignment="Center" TextTrimming="CharacterEllipsis">
+                                            <Run Text="{Binding Level, Mode=OneWay, StringFormat=[{0}]}" Foreground="{StaticResource InkMuted}" />
+                                            <Run Text="{Binding Name, Mode=OneWay}" />
+
+
+                                        </TextBlock>
+                                    </DockPanel>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+
+            <!-- Column 3: conditions, effects, inventory, log -->
+            <StackPanel Grid.Column="2">
+                <Border Style="{StaticResource Card}">
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource CardTitle}" Text="CONDITIONS" />
+                        <ItemsControl ItemsSource="{Binding Conditions}" IsTabStop="False">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate DataType="{x:Type vm:ConditionToggle}">
+                                    <ToggleButton Style="{StaticResource PillToggle}" Content="{Binding Name}" IsChecked="{Binding IsActive}" />
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+                            <TextBlock Text="Exhaustion" VerticalAlignment="Center" Margin="0,0,10,0" />
+                            <Button Content="−" Width="30" Padding="0" Command="{Binding Play.ChangeExhaustion}" CommandParameter="-1" AutomationProperties.Name="Reduce exhaustion" />
+                            <TextBlock Text="{Binding Character.ExhaustionLevel}" FontSize="16" FontWeight="SemiBold" Width="30" TextAlignment="Center" VerticalAlignment="Center" />
+                            <Button Content="+" Width="30" Padding="0" Command="{Binding Play.ChangeExhaustion}" CommandParameter="1" AutomationProperties.Name="Increase exhaustion" />
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+                <Border Style="{StaticResource Card}">
+                    <StackPanel>
+                        <DockPanel>
+                            <Button DockPanel.Dock="Right" Content="+ Effect" Padding="8,2" Command="{Binding Play.QuickAddEffect}" />
+                            <TextBlock Style="{StaticResource CardTitle}" Text="ACTIVE EFFECTS" />
+                        </DockPanel>
+                        <TextBlock Style="{StaticResource Hint}" Margin="0" Text="None. Effects like Bless or a potion can add modifiers and end on a rest."
+                                   Visibility="{Binding Character.Effects.Count, Converter={StaticResource VisibleWhen}, ConverterParameter=Invert}" />
+                        <ItemsControl ItemsSource="{Binding Character.Effects}" IsTabStop="False">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate DataType="{x:Type domain:Effect}">
+                                    <DockPanel Margin="0,0,0,4">
+                                        <Button DockPanel.Dock="Right" Style="{StaticResource IconButton}" Content="✕" ToolTip="End effect"
+                                                Command="{Binding DataContext.Play.RemoveEffect, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding}"
+                                                AutomationProperties.Name="{Binding Name, StringFormat=End {0}}" />
+                                        <StackPanel>
+                                            <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
+                                            <TextBlock FontSize="11" Foreground="{StaticResource InkMuted}" Text="{Binding Expiry, Converter={StaticResource EnumDisplay}}" />
+                                        </StackPanel>
+                                    </DockPanel>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </Border>
+
+                <Border Style="{StaticResource Card}">
+                    <StackPanel>
+                        <DockPanel>
+                            <Button DockPanel.Dock="Right" Content="+ Item" Padding="8,2" Command="{Binding Play.QuickAddItem}" />
+                            <TextBlock Style="{StaticResource CardTitle}" Text="INVENTORY" />
+                        </DockPanel>
+                        <TextBlock Style="{StaticResource Hint}" Margin="0" Text="Nothing carried."
+                                   Visibility="{Binding Character.Items.Count, Converter={StaticResource VisibleWhen}, ConverterParameter=Invert}" />
+                        <ItemsControl ItemsSource="{Binding Character.Items}" IsTabStop="False">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate DataType="{x:Type domain:Item}">
+                                    <DockPanel Margin="0,0,0,2">
+                                        <Button DockPanel.Dock="Right" Style="{StaticResource IconButton}" Content="✕" ToolTip="Remove item"
+                                                Command="{Binding DataContext.RemoveEntry, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding}"
+                                                AutomationProperties.Name="{Binding Name, StringFormat=Remove {0}}" />
+                                        <CheckBox DockPanel.Dock="Right" IsChecked="{Binding Equipped}" ToolTip="Equipped" Margin="0,0,6,0"
+                                                  AutomationProperties.Name="{Binding Name, StringFormat={}{0} equipped}" />
+                                        <TextBlock VerticalAlignment="Center" TextTrimming="CharacterEllipsis">
+                                            <Run Text="{Binding Quantity, Mode=OneWay, StringFormat={}{0}×}" Foreground="{StaticResource InkMuted}" />
+                                            <Run Text="{Binding Name, Mode=OneWay}" />
+                                        </TextBlock>
+                                    </DockPanel>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </Border>
+
+                <Border Style="{StaticResource Card}">
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource CardTitle}" Text="SESSION LOG" />
+                        <TextBlock Style="{StaticResource Hint}" Margin="0" Text="Actions you take here are listed for this session."
+                                   Visibility="{Binding Play.ActivityLog.Count, Converter={StaticResource VisibleWhen}, ConverterParameter=Invert}" />
+                        <ItemsControl ItemsSource="{Binding Play.ActivityLog}" IsTabStop="False" MaxHeight="260">
+                            <ItemsControl.Template>
+                                <ControlTemplate><ScrollViewer VerticalScrollBarVisibility="Auto"><ItemsPresenter /></ScrollViewer></ControlTemplate>
+                            </ItemsControl.Template>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate><TextBlock Text="{Binding}" TextWrapping="Wrap" FontSize="12" Margin="0,0,0,4" /></DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+        </Grid>
+    </ScrollViewer>
+</UserControl>

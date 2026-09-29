@@ -2,8 +2,8 @@
   <!-- Single place for the application version. Release tags (vX.Y.Z) must match this. -->
   <PropertyGroup>
     <Version>1.0.2</Version>
-    <Authors>DndSheet</Authors>
-    <Product>DndSheet</Product>
+    <Authors>Hearthsheet</Authors>
+    <Product>Hearthsheet</Product>
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
