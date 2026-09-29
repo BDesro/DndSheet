@@ -237,3 +237,108 @@ public class SupabaseAuthTests
         Assert.False(_secrets.ContainsKey(SupabaseAuth.SecretKey));
     }
 }
+
+public class SupabaseCharacterStoreTests
+{
+    private static readonly CloudUpload Upload = new(Guid.Parse("11111111-1111-1111-1111-111111111111"), "A", "Elf", 1, """{"identity":{"name":"A"}}""");
+
+    private static string RowJson(Guid id, long revision, string? data = """{"identity":{"name":"A"}}""", string? deletedAt = null) =>
+        $$"""{"id":"{{id}}","name":"A","revision":{{revision}},"schema_version":1,"data":{{data ?? "null"}},"deleted_at":{{(deletedAt is null ? "null" : $"\"{deletedAt}\"")}},"updated_at":"2026-09-29T10:00:00.123456+00:00"}""";
+
+    private static (SupabaseCharacterStore Store, SupabaseStub Stub, FakeSession Session) Create(Func<RecordedRequest, HttpResponseMessage> respond)
+    {
+        var stub = new SupabaseStub(respond);
+        var session = new FakeSession();
+        return (new SupabaseCharacterStore(new SupabaseHttp(SupabaseAuthTests.Options, stub), session), stub, session);
+    }
+
+    private static HttpResponseMessage Ok(string body) => SupabaseStub.Json(HttpStatusCode.OK, body);
+
+    [Fact]
+    public async Task Update_FiltersOnRevision_AndReturnsTheNewRow()
+    {
+        var (store, stub, _) = Create(_ => Ok($"[{RowJson(Upload.Id, 4)}]"));
+        var row = await store.UpdateIfRevisionAsync(Upload.Id, 3, Upload, default);
+
+        var request = Assert.Single(stub.Requests);
+        Assert.Equal(HttpMethod.Patch, request.Method);
+        Assert.Contains($"id=eq.{Upload.Id}", request.PathAndQuery);
+        Assert.Contains("revision=eq.3", request.PathAndQuery);
+        Assert.Equal("token", request.Bearer);
+        Assert.Equal("anon-key", request.ApiKey);
+        Assert.Equal("return=representation", request.Prefer);
+        Assert.Contains("\"deleted_at\":null", request.Body);
+        Assert.Contains("\"identity\":{\"name\":\"A\"}", request.Body); // data is sent as JSON, not a string
+        Assert.Equal(4, row!.Revision);
+        Assert.Contains("identity", row.Data);
+    }
+
+    [Fact]
+    public async Task Update_RevisionMismatch_ReturnsNull()
+    {
+        var (store, _, _) = Create(_ => Ok("[]"));
+        Assert.Null(await store.UpdateIfRevisionAsync(Upload.Id, 3, Upload, default));
+    }
+
+    [Fact]
+    public async Task Insert_ExistingId_ReturnsNull()
+    {
+        var (store, _, _) = Create(_ => SupabaseStub.Json(HttpStatusCode.Conflict, """{"message":"duplicate key"}"""));
+        Assert.Null(await store.InsertAsync(Upload, default));
+    }
+
+    [Fact]
+    public async Task Tombstone_ReportsWhetherARowMatched()
+    {
+        var (store, stub, _) = Create(r => Ok(r.PathAndQuery.Contains("revision=eq.1") ? $$"""[{"id":"{{Upload.Id}}"}]""" : "[]"));
+        Assert.True(await store.TombstoneIfRevisionAsync(Upload.Id, 1, default));
+        Assert.False(await store.TombstoneIfRevisionAsync(Upload.Id, 2, default));
+        Assert.Contains("\"data\":null", stub.Requests[0].Body);
+    }
+
+    [Fact]
+    public async Task Get_ParsesTombstones()
+    {
+        var (store, _, _) = Create(_ => Ok($"[{RowJson(Upload.Id, 2, data: null, deletedAt: "2026-09-29T10:00:00+00:00")}]"));
+        var row = await store.GetAsync(Upload.Id, default);
+        Assert.True(row!.IsDeleted);
+        Assert.Equal(2, row.Revision);
+    }
+
+    [Fact]
+    public async Task ChangedSince_PagesThroughAllRows()
+    {
+        var page = "[" + string.Join(",", Enumerable.Range(0, 500).Select(_ => RowJson(Guid.NewGuid(), 1))) + "]";
+        var (store, stub, _) = Create(r => Ok(r.PathAndQuery.Contains("offset=0") ? page : $"[{RowJson(Guid.NewGuid(), 1)}]"));
+
+        var rows = await store.ChangedSinceAsync(new DateTimeOffset(2026, 9, 29, 9, 0, 0, TimeSpan.Zero), default);
+        Assert.Equal(501, rows.Count);
+        Assert.Equal(2, stub.Requests.Count);
+        Assert.Contains("updated_at=gt.", stub.Requests[0].PathAndQuery);
+        Assert.Contains("order=updated_at.asc", stub.Requests[0].PathAndQuery);
+    }
+
+    [Fact]
+    public async Task Unauthorized_RefreshesOnce_ThenRetries()
+    {
+        var calls = 0;
+        var (store, stub, session) = Create(_ => ++calls == 1 ? SupabaseStub.Json(HttpStatusCode.Unauthorized, "{}") : Ok("[]"));
+        Assert.Null(await store.GetAsync(Upload.Id, default));
+        Assert.Equal(2, stub.Requests.Count);
+        Assert.Equal(1, session.Invalidations);
+    }
+
+    [Fact]
+    public async Task UnauthorizedTwice_SignsOut()
+    {
+        var (store, _, _) = Create(_ => SupabaseStub.Json(HttpStatusCode.Unauthorized, "{}"));
+        await Assert.ThrowsAsync<CloudSignedOutException>(() => store.GetAsync(Upload.Id, default));
+    }
+
+    [Fact]
+    public async Task MalformedResponse_IsARequestError()
+    {
+        var (store, _, _) = Create(_ => Ok("{not json"));
+        await Assert.ThrowsAsync<CloudRequestException>(() => store.GetAsync(Upload.Id, default));
+    }
+}
