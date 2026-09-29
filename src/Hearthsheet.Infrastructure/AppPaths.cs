@@ -19,22 +19,35 @@ public sealed class AppPaths
 
     public static string DefaultRoot { get; } = ResolveDefaultRoot();
 
-    /// <summary>Before the Hearthsheet rename the data folder was "DndSheet"; move it over once so characters carry across.</summary>
+    /// <summary>
+    /// Before the Hearthsheet rename the data folder was "DndSheet". Carry it over whenever the new folder has no
+    /// database yet (not only when the folder is missing: anything, e.g. a failed first launch, may have created it).
+    /// </summary>
     private static string ResolveDefaultRoot()
     {
         var local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
         var root = Path.Combine(local, "Hearthsheet");
-        var legacy = Path.Combine(local, "DndSheet");
+        MigrateLegacy(Path.Combine(local, "DndSheet"), root);
+        return root;
+    }
+
+    public static void MigrateLegacy(string legacy, string root)
+    {
+        if (!File.Exists(Path.Combine(legacy, "characters.db")) || File.Exists(Path.Combine(root, "characters.db"))) return;
         try
         {
-            if (!Directory.Exists(root) && Directory.Exists(legacy)) Directory.Move(legacy, root);
+            Directory.CreateDirectory(root);
+            foreach (var entry in new DirectoryInfo(legacy).EnumerateFileSystemInfos())
+            {
+                var target = Path.Combine(root, entry.Name);
+                if (File.Exists(target) || Directory.Exists(target)) continue;
+                if (entry is DirectoryInfo dir) dir.MoveTo(target); else ((FileInfo)entry).MoveTo(target);
+            }
         }
-        catch (IOException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            // Old version still running: nothing is lost (the old folder is untouched); the move retries next launch.
+            // Old version still running: whatever was not moved stays in the old folder and the move retries next launch.
         }
-        catch (UnauthorizedAccessException) { }
-        return root;
     }
 
     public string Root { get; }
