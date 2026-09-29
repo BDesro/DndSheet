@@ -77,8 +77,17 @@ public sealed class SupabaseAuth(SupabaseHttp http, ISecretStore secrets, TimePr
     /// <summary>Forgets the session locally and revokes it on the server (best effort).</summary>
     public async Task SignOutAsync(CancellationToken ct)
     {
-        var token = _accessToken;
-        Forget();
+        string? token;
+        await _lock.WaitAsync(ct); // waits out any in-flight refresh so it can't resurrect the session
+        try
+        {
+            token = _accessToken;
+            Forget();
+        }
+        finally
+        {
+            _lock.Release();
+        }
         if (token is null) return;
         try
         {
@@ -181,7 +190,7 @@ public sealed class SupabaseAuth(SupabaseHttp http, ISecretStore secrets, TimePr
 
     private void Forget()
     {
-        (_accessToken, _refreshToken, UserId, Email) = (null, null, null, null);
+        (_accessToken, _refreshToken, UserId, Email, _remember) = (null, null, null, null, false);
         try
         {
             secrets.Delete(SecretKey);

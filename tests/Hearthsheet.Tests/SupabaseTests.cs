@@ -202,9 +202,38 @@ public class SupabaseAuthTests
     [InlineData("https://evil.example/x")]
     [InlineData("//evil.example/x")]
     [InlineData("/auth/v1/token")]
+    [InlineData(@"\/evil.example/x")]
     public async Task OnlyRelativePathsOnTheConfiguredHost_AreAllowed(string path)
     {
         var http = new SupabaseHttp(Options, new SupabaseStub(_ => Ok("{}")));
         await Assert.ThrowsAsync<ArgumentException>(() => http.SendAsync(HttpMethod.Get, path, null, null, default));
+    }
+
+    [Fact]
+    public async Task SignOut_DuringAnInFlightRefresh_IsNotUndoneByIt()
+    {
+        using var entered = new ManualResetEventSlim();
+        using var gate = new ManualResetEventSlim();
+        var (auth, _) = Create(r =>
+        {
+            if (r.PathAndQuery == "/auth/v1/logout") return new HttpResponseMessage(HttpStatusCode.NoContent);
+            if (!r.Uri.Query.Contains("refresh_token")) return Ok(SupabaseStub.Session("a1", "r1"));
+            entered.Set();
+            gate.Wait();
+            return Ok(SupabaseStub.Session("a2", "r2"));
+        });
+        await auth.SignInAsync("a@b.c", "password1", remember: true, default);
+        _time.Now += TimeSpan.FromHours(1);
+
+        var refresh = Task.Run(() => auth.GetAccessTokenAsync(default));
+        entered.Wait();
+        var signOut = Task.Run(() => auth.SignOutAsync(default));
+        await Task.Delay(100); // let sign-out run (or block on the lock) while the refresh is in flight
+        gate.Set();
+        await Task.WhenAll(refresh, signOut);
+
+        Assert.False(auth.IsSignedIn);
+        Assert.Null(auth.UserId);
+        Assert.False(_secrets.ContainsKey(SupabaseAuth.SecretKey));
     }
 }

@@ -82,7 +82,11 @@ public sealed class SupabaseHttp
         if (path.StartsWith('/') || !Uri.TryCreate(path, UriKind.Relative, out var relative))
             throw new ArgumentException("Supabase paths must be relative to the project URL.", nameof(path));
 
-        using var request = new HttpRequestMessage(method, relative);
+        var uri = new Uri(_http.BaseAddress!, relative);
+        if (uri.Scheme != Uri.UriSchemeHttps || !string.Equals(uri.Authority, _http.BaseAddress!.Authority, StringComparison.OrdinalIgnoreCase))
+            throw new ArgumentException("Supabase paths must stay on the project host.", nameof(path));
+
+        using var request = new HttpRequestMessage(method, uri);
         request.Headers.Add("apikey", _apiKey);
         if (accessToken is not null) request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
         if (prefer is not null) request.Headers.Add("Prefer", prefer);
