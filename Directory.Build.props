@@ -1,7 +1,7 @@
 <Project>
   <!-- Single place for the application version. Release tags (vX.Y.Z) must match this. -->
   <PropertyGroup>
-    <Version>1.0.2</Version>
+    <Version>1.1.0</Version>
     <Authors>Hearthsheet</Authors>
     <Product>Hearthsheet</Product>
     <LangVersion>latest</LangVersion>
