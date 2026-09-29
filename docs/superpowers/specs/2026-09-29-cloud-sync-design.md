@@ -148,16 +148,18 @@ Before the pass, `SyncViewModel` calls `MainViewModel.Save()` on the UI thread, 
 4. **Push dirty characters.** For each dirty row:
    - `cloud_revision` null → `Insert`.
      - A 409 where `Get(id)` returns our row → treat it as a revision mismatch.
-     - A 409 where `Get(id)` returns nothing → the id belongs to another account (for example after "keep and upload" on
-       an account switch). Give the local character a new id and insert again.
+     - A 409 where `Get(id)` returns nothing → the id is used by another account. Log it and leave the character dirty.
+       This should not happen, because an account switch gives every local character a new id first (§7).
    - Otherwise → `UpdateIfRevision(id, cloud_revision, doc)`. This is a PATCH filtered on `id=eq.X&revision=eq.N`
      with `Prefer: return=representation`; an empty result means a mismatch.
    - Success → `MarkPushed`.
    - **Mismatch (conflict)** →
      1. Save the local version as a new character, with a new id and the name "Name (conflict copy, yyyy-MM-dd)".
         It is dirty and uploads next pass.
-     2. Fetch the cloud row and apply it over the original id. For this one case `ApplyRemote` is forced, and the
-        cloud version wins.
+     2. Fetch the cloud row and apply it over the original id, provided nothing was saved since the push started
+        (the `local_revision` guard). The cloud version wins.
+     - If the cloud row is a tombstone, the edit beats the delete: rebase onto the tombstone's revision and stay dirty,
+       so the next pass revives it. If the cloud row is gone (purged), reset to never-synced so it is inserted again.
    - A document over 10 MB is skipped with a warning and stays dirty.
 5. **Pull.** `ChangedSince(sync_last_pull − 2 min)`, or a full pull when `sync_last_pull` is empty.
    - Rows whose `revision` equals the local `cloud_revision` are skipped, which makes the pull idempotent.
@@ -178,15 +180,21 @@ Before the pass, `SyncViewModel` calls `MainViewModel.Save()` on the UI thread, 
    full pull. Local characters with a `cloud_revision` whose id is absent from `ListAllIds()` are reset to never-synced and dirty,
    and re-upload on the next pass. Consequence: a character deleted elsewhere more than 90 days ago comes back on a machine that
    was offline that whole time. That is an accepted un-delete, never data loss.
-7. **Notify.** Raise `Completed(changedIds, deletedIds)`. `SyncViewModel` refreshes the list on the UI thread, and:
-   - The open character changed remotely:
-     - Session clean → reload it. Status: "Updated from another device".
-     - Session dirty (edits typed during the pass) → save the in-memory version as a conflict copy, then reload.
-   - The open character deleted remotely:
-     - Session clean → close it with a notice.
-     - Session dirty → keep it as a new, never-synced character (a conflict copy) and tell the user.
+7. **The open character is never written by the background pass.** Its autosave could otherwise write the stale
+   in-memory model over a freshly applied remote version and then push it, silently discarding the remote edit.
+   Remote changes and deletes for the open character's id are returned as **deferred changes** instead, and applied
+   on the UI thread, where no save can interleave:
+   - If the session has unsaved edits, or the row was saved since the last push, the in-memory version is first saved
+     as a conflict copy.
+   - The remote change is then applied (or the row deleted) unconditionally, and the view reloads.
+   - Status: "Updated from another device" (plus "your edits were kept as a conflict copy"), or "Deleted on another
+     device" (opening the kept copy if there was one).
+   - If the user switched away from that character before the deferred change is applied, it is applied with the
+     normal dirty guard instead.
+8. **Notify.** Return `SyncResult(outcome, changedIds, deletedIds, deferred, conflictCopies, warnings)`. `SyncViewModel`
+   applies the deferred changes and refreshes the list on the UI thread.
 
-**Status values:** `Synced HH:mm`, `Syncing…`, `Offline`, `Cloud unavailable`, `Signed out – sign in to resume sync`,
+**Status values:** `Synced HH:mm`, `Syncing…`, `Offline` (network failure), `Cloud unavailable` (timeout or 5xx), `Signed out – sign in to resume sync`,
 `Not signed in`. Failures retry at the next interval. They never block saving, loading or closing.
 
 ## 6. Auth and "Stay signed in"
@@ -204,10 +212,14 @@ Before the pass, `SyncViewModel` calls `MainViewModel.Save()` on the UI thread, 
 Token handling:
 - **Access token:** kept in memory only, and refreshed 60 s before `expires_at` or after a 401.
 - **Refresh token:** kept in memory. With "Stay signed in" checked it is also written to `ISecretStore` under the key
-  `supabase-refresh`. Supabase rotates it on every refresh, so every new value is written back immediately. Refreshes are
+  `supabase-session`, as JSON `{refresh token, user id, email}`. The user id is stored so an offline start still knows
+  which account it belongs to. Supabase rotates it on every refresh, so every new value is written back immediately. Refreshes are
   serialized by a lock, so rotation can never race.
-- **Startup:** a stored refresh token → a silent refresh → signed in with no prompt. If the refresh fails with 400/401, the stored
-  token is deleted and the state is `Signed out`. If it fails with a network error, the token is kept and the state is `Offline`.
+- **Startup:** a stored session is loaded with no network call, so the user is signed in with no prompt. The first sync pass
+  refreshes it. If the refresh fails with 400/401, the stored session is deleted and the state is `Signed out`. If it fails
+  with a network error, the session is kept and the state is `Offline`.
+- Requests made without a user session (sign-in, sign-up, reset) send only the `apikey` header. This works with both the
+  legacy anon key and the newer `sb_publishable_…` key.
 - **Unchecked:** nothing is persisted, and any previously stored token is deleted.
 - **Sign out:** best-effort logout, delete the stored token, stop the timer. Local characters and `sync_account` are kept.
 - **Secrets:**
@@ -230,8 +242,9 @@ Token handling:
     2. Code, new password and confirm, then "Reset". This verifies the code, sets the password and signs in.
 - **Account-switch prompt**, shown when signing in as a different user than `sync_account`:
   - "This computer's characters were synced with another account."
-  - **Upload them to this account:** `ResetSyncState(markAllDirty: true)`. The id-collision rule in §5.4 handles any ids that
-    already exist under the other account.
+  - In both choices below, every local character first gets a **new id**, because the old ids exist under the other account
+    and could never be inserted into this one. The open character is saved and closed first, and pending deletes are dropped.
+  - **Upload them to this account:** `ResetSyncState(markAllDirty: true)`.
   - **Keep them on this computer only:** `ResetSyncState(markAllDirty: false)`, after which only characters created or edited
     from now on upload.
   - **Cancel:** sign out.
