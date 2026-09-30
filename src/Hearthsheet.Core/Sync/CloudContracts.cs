@@ -6,6 +6,7 @@ public sealed record CloudRow(Guid Id, string Name, long Revision, int SchemaVer
     public bool IsDeleted => Data is null || DeletedAt is not null;
 }
 
+/// <summary>A character document to push; the server assigns its revision.</summary>
 public sealed record CloudUpload(Guid Id, string Name, string Description, int SchemaVersion, string Data);
 
 /// <summary>The signed-in user's character rows in the cloud. Revisions are assigned by the server.</summary>
@@ -24,6 +25,7 @@ public interface ICloudCharacterStore
     Task<IReadOnlySet<Guid>> ListAllIdsAsync(CancellationToken ct);
 }
 
+/// <summary>The signed-in cloud account and its access token.</summary>
 public interface ICloudSession
 {
     string? UserId { get; }
@@ -33,6 +35,7 @@ public interface ICloudSession
     void InvalidateAccessToken();
 }
 
+/// <summary>Base class for cloud failures the sync pass and the account dialogs handle.</summary>
 public abstract class CloudException(string message, Exception? inner = null) : Exception(message, inner);
 
 /// <summary>The service rejected the request. The message is safe to show to the user.</summary>
@@ -44,4 +47,5 @@ public sealed class CloudUnavailableException(string message, bool offline, Exce
     public bool Offline { get; } = offline;
 }
 
+/// <summary>There is no usable session: never signed in, or the refresh token was revoked or expired.</summary>
 public sealed class CloudSignedOutException(string message) : CloudException(message);

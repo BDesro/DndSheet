@@ -8,15 +8,17 @@ using Microsoft.Extensions.Logging;
 
 namespace Hearthsheet.Core.Sync;
 
+/// <summary>How a sync pass ended.</summary>
 public enum SyncOutcome { Synced, NotSignedIn, SignedOut, Offline, Unavailable, AccountMismatch, Busy }
 
 /// <summary>
-/// A remote change to the character open in the UI. The background pass never writes that row (its autosave
-/// could overwrite the remote version with the stale in-memory one); <see cref="CloudSync.ApplyDeferred"/>
-/// applies it on the UI thread. <see cref="CopiedLocalRevision"/> is set when a conflict copy was already made.
+/// A remote change to the character open in the UI (<see cref="Remote"/> is null for a delete). The background
+/// pass never writes that row (its autosave could overwrite the remote version with the stale in-memory one);
+/// <see cref="CloudSync.ApplyDeferred"/> applies it on the UI thread, making any conflict copy there.
 /// </summary>
-public sealed record DeferredChange(Guid Id, Character? Remote, long Revision, long? CopiedLocalRevision = null);
+public sealed record DeferredChange(Guid Id, Character? Remote, long Revision);
 
+/// <summary>What a sync pass did: the ids it changed or deleted, the changes left for the UI, copies and warnings.</summary>
 public sealed record SyncResult(
     SyncOutcome Outcome, IReadOnlySet<Guid> Changed, IReadOnlySet<Guid> Deleted,
     IReadOnlyList<DeferredChange> Deferred, int ConflictCopies, IReadOnlyList<string> Warnings)
@@ -78,13 +80,12 @@ public sealed class CloudSync(
         {
             // The user moved on to another character meanwhile: apply with the normal dirty guard.
             if (change.Remote is null) local.ApplyRemoteDelete(change.Id);
-            else local.ApplyRemote(change.Remote, change.Revision, ifLocalRevision: change.CopiedLocalRevision);
+            else local.ApplyRemote(change.Remote, change.Revision);
             return null;
         }
 
         Character? copy = null;
-        var savedSinceCopy = local.GetState(change.Id) is { Dirty: true } state && state.LocalRevision != change.CopiedLocalRevision;
-        if (hasUnsavedChanges || savedSinceCopy)
+        if (hasUnsavedChanges || local.GetState(change.Id) is { Dirty: true })
         {
             copy = ConflictCopy(openInMemory);
             repository.Save(copy);
@@ -147,12 +148,13 @@ public sealed class CloudSync(
             try
             {
                 // False means the row is gone or was edited elsewhere. Either way this delete is finished:
-                // a newer remote edit wins and comes back with the pull.
+                // a newer remote edit wins. It is fetched before the pending delete is cleared, because it may be
+                // older than the pull cursor and a failed fetch must be retried next pass.
                 var deleted = await cloud.TombstoneIfRevisionAsync(pending.Id, pending.CloudRevision, ct);
+                var row = deleted ? null : await cloud.GetAsync(pending.Id, ct);
                 local.ClearPendingDelete(pending.Id);
-                if (!deleted && await cloud.GetAsync(pending.Id, ct) is { IsDeleted: false } row
-                    && TryRead(row, pass, out var character) && local.ApplyRemote(character, row.Revision))
-                    pass.Changed.Add(pending.Id); // the edit that beat this delete may be older than the pull cursor
+                if (row is { IsDeleted: false } && TryRead(row, pass, out var character) && local.ApplyRemote(character, row.Revision))
+                    pass.Changed.Add(pending.Id);
             }
             catch (CloudRequestException ex)
             {
@@ -205,13 +207,25 @@ public sealed class CloudSync(
         if (!TryRead(remote, pass, out var remoteCharacter)) return;
 
         var mine = CharacterJson.Deserialize(change.Data, change.SchemaVersion, migrator);
+        mine.Id = change.Id;
+        if (CharacterJson.Serialize(mine) == CharacterJson.Serialize(remoteCharacter))
+        {
+            // Our own earlier push, whose response was lost: nothing to resolve.
+            local.MarkPushed(change.Id, change.LocalRevision, remote.Revision);
+            return;
+        }
+
+        if (openCharacter() == change.Id)
+        {
+            // ApplyDeferred makes the copy on the UI thread. Nothing is written here, so an interrupted pass
+            // just conflicts again next time.
+            pass.Deferred.Add(new DeferredChange(change.Id, remoteCharacter, remote.Revision));
+            return;
+        }
         repository.Save(ConflictCopy(mine));
         pass.ConflictCopies++;
         logger.LogInformation("Conflict on {Id}: kept the cloud version and saved the local one as a copy", change.Id);
-
-        if (openCharacter() == change.Id)
-            pass.Deferred.Add(new DeferredChange(change.Id, remoteCharacter, remote.Revision, change.LocalRevision));
-        else if (local.ApplyRemote(remoteCharacter, remote.Revision, ifLocalRevision: change.LocalRevision))
+        if (local.ApplyRemote(remoteCharacter, remote.Revision, ifLocalRevision: change.LocalRevision))
             pass.Changed.Add(change.Id);
     }
 
@@ -240,7 +254,7 @@ public sealed class CloudSync(
             if (!TryRead(row, pass, out var character)) continue;
             if (isOpen)
             {
-                // A conflict on the open character already deferred this exact revision, with its copy recorded.
+                // A conflict on the open character may already have deferred this exact revision.
                 if (!pass.Deferred.Exists(d => d.Id == row.Id && d.Revision == row.Revision))
                     pass.Deferred.Add(new DeferredChange(row.Id, character, row.Revision));
                 Hold(row.UpdatedAt);

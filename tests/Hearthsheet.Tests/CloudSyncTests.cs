@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using Hearthsheet.Core.Domain;
 using Hearthsheet.Core.Serialization;
 using Hearthsheet.Core.Sync;
@@ -21,10 +22,21 @@ internal sealed class FakeCloud(ManualTime time) : ICloudCharacterStore
     public bool Offline { get; set; }
     public TaskCompletionSource? Gate { get; set; }
 
+    private (string Call, bool AfterCommit)? _failOnce;
+
+    /// <summary>
+    /// Makes the next call to <paramref name="call"/> throw once: before it runs, or after it commits when
+    /// <paramref name="afterCommit"/> (the response was lost).
+    /// </summary>
+    public void FailOnce(string call, bool afterCommit = false) => _failOnce = (call, afterCommit);
+
     private DateTimeOffset Tick() => time.Now += TimeSpan.FromSeconds(1);
-    private void Check()
+    private void Check(bool committed = false, [CallerMemberName] string call = "")
     {
-        if (Offline) throw new CloudUnavailableException("offline", offline: true);
+        if (Offline && !committed) throw new CloudUnavailableException("offline", offline: true);
+        if (_failOnce != (call, committed)) return;
+        _failOnce = null;
+        throw new CloudUnavailableException("timed out", offline: false);
     }
 
     public Task<CloudRow?> InsertAsync(CloudUpload u, CancellationToken ct)
@@ -38,7 +50,9 @@ internal sealed class FakeCloud(ManualTime time) : ICloudCharacterStore
     {
         Check();
         if (!Rows.TryGetValue(id, out var row) || row.Revision != expected) return Task.FromResult<CloudRow?>(null);
-        return Task.FromResult<CloudRow?>(Rows[id] = new CloudRow(id, u.Name, row.Revision + 1, u.SchemaVersion, u.Data, null, Tick()));
+        Rows[id] = new CloudRow(id, u.Name, row.Revision + 1, u.SchemaVersion, u.Data, null, Tick());
+        Check(committed: true);
+        return Task.FromResult<CloudRow?>(Rows[id]);
     }
 
     public Task<bool> TombstoneIfRevisionAsync(Guid id, long expected, CancellationToken ct)
@@ -507,11 +521,69 @@ public class CloudSyncTests : IDisposable
         _a.OpenId = c.Id;
         var change = Assert.Single((await _a.SyncAsync()).Deferred);
 
-        _a.Sync.ApplyDeferred(change, null, hasUnsavedChanges: false);
+        Assert.Null(_a.Sync.ApplyDeferred(change, null, hasUnsavedChanges: false));
+        Assert.Equal("A-name", _a.NameOf(c.Id)); // still dirty: refused, so the next pass conflicts as a closed character
         _a.OpenId = null;
         await _a.SyncAsync();
 
         Assert.Single(_a.Repo.List(), s => s.Name.Contains("(conflict copy, ", StringComparison.Ordinal));
+        Assert.Equal("B-name", _a.NameOf(c.Id));
+    }
+    [Fact]
+    public async Task ConflictOnTheOpenCharacter_InterruptedBeforeApplying_MakesOnlyOneCopy()
+    {
+        var c = await SyncedToBoth();
+        _b.Rename(c.Id, "B-name");
+        await _b.SyncAsync();
+        _a.Rename(c.Id, "A-name");
+        _a.OpenId = c.Id;
+        _cloud.FailOnce(nameof(FakeCloud.ChangedSinceAsync)); // the pull fails after the conflicting push
+        Assert.Equal(SyncOutcome.Unavailable, (await _a.SyncAsync()).Outcome);
+
+        var change = Assert.Single((await _a.SyncAsync()).Deferred);
+        _a.Sync.ApplyDeferred(change, _a.Repo.Load(c.Id), hasUnsavedChanges: false);
+
+        Assert.Single(_a.Repo.List(), s => s.Name.Contains("(conflict copy, ", StringComparison.Ordinal));
+        Assert.Equal("B-name", _a.NameOf(c.Id));
+    }
+
+    [Fact]
+    public async Task LostUpdateResponse_IsRecognisedNextPass_WithoutAConflictCopy()
+    {
+        var c = await SyncedToBoth();
+        _a.Rename(c.Id, "A-name");
+        _cloud.FailOnce(nameof(FakeCloud.UpdateIfRevisionAsync), afterCommit: true);
+        Assert.Equal(SyncOutcome.Unavailable, (await _a.SyncAsync()).Outcome);
+        Assert.Equal("A-name", _cloud.Rows[c.Id].Name);
+
+        var result = await _a.SyncAsync();
+        Assert.Equal(0, result.ConflictCopies);
+        Assert.Empty(_a.Repo.GetDirty());
+        Assert.Single(_a.Repo.List());
+    }
+
+    [Fact]
+    public async Task LocalDelete_LosingToAnOldEdit_IsRetriedWhenTheRestoreFetchFails()
+    {
+        var c = await SyncedToBoth();
+        _cloud.Gate = new TaskCompletionSource();
+        var gate = _cloud.Gate;
+        var first = _a.SyncAsync();
+        _cloud.Gate = null;
+        _a.Rename(c.Id, "A-name");
+        _b.Rename(c.Id, "B-name");
+        await _b.SyncAsync();
+        _time.Now += TimeSpan.FromMinutes(10);
+        _b.Add("Other");
+        await _b.SyncAsync();
+        gate.SetResult();
+        await first;
+
+        _a.Repo.Delete(c.Id);
+        _cloud.FailOnce(nameof(FakeCloud.GetAsync));
+        Assert.Equal(SyncOutcome.Unavailable, (await _a.SyncAsync()).Outcome);
+        await _a.SyncAsync();
+        Assert.False(_cloud.Rows[c.Id].IsDeleted);
         Assert.Equal("B-name", _a.NameOf(c.Id));
     }
 }
