@@ -49,6 +49,8 @@ dotnet run --project src/Hearthsheet.App -- --Application:DataDirectory=$env:TEM
 dotnet run --project src/Hearthsheet.App -- --Application:DataDirectory=$env:TEMP\hs-b
 ```
 
+Both installations share one Windows Credential Manager entry (`Hearthsheet/supabase-session`), so for steps 6–8 close the other installation first.
+
 | # | Steps | Expected |
 |---|---|---|
 | 1 | A: create an account, create "Arannis". B: sign in. | B lists Arannis after sign-in. |
@@ -61,6 +63,7 @@ dotnet run --project src/Hearthsheet.App -- --Application:DataDirectory=$env:TEM
 | 8 | Sign out, then check Control Panel → Credential Manager. | No `Hearthsheet/supabase-session` entry. |
 | 9 | Forgot password → code → new password. | The email arrives from your domain and the new password works. |
 | 10 | Sign in to A as a second account. | The account-switch prompt appears, and both choices keep every local character. |
+| 11 | With more than 500 characters in the account, sign in from a fresh installation (a new data folder). | Every character is pulled, not just the first 500. |
 
 **Row-level security check** (SQL editor; replace the ids with two real user ids from Authentication → Users):
 

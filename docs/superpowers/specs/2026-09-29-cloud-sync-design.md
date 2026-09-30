@@ -66,7 +66,7 @@ create policy own_update on public.characters for update using (user_id = auth.u
 -- Tombstone retention (pg_cron is available on the free tier).
 create extension if not exists pg_cron;
 select cron.schedule('purge-character-tombstones', '17 3 * * *',
-  $$delete from public.characters where deleted_at < now() - interval '90 days'$$);
+  $$delete from public.characters where deleted_at is not null and updated_at < now() - interval '90 days'$$);
 ```
 
 **Auth settings (dashboard):** email confirmation off; minimum password length 8; custom SMTP → Resend;

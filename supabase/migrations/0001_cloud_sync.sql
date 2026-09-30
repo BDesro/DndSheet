@@ -40,6 +40,7 @@ grant select, insert, update on public.characters to authenticated;
 -- The keep-alive workflow queries as anon; with no anon policy, RLS returns [] but the request still reaches the database.
 grant select on public.characters to anon;
 
--- Tombstone retention: 90 days (the app treats a machine as stale after 80).
+-- Tombstone retention: 90 days by server time (updated_at; deleted_at comes from the client clock).
+-- The app treats a machine as stale after 80.
 select cron.schedule('purge-character-tombstones', '17 3 * * *',
-  $$delete from public.characters where deleted_at < now() - interval '90 days'$$);
+  $$delete from public.characters where deleted_at is not null and updated_at < now() - interval '90 days'$$);

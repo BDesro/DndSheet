@@ -198,7 +198,7 @@ git tag vX.Y.Z → Release workflow (tests, scripts/publish.ps1, gh release crea
 
 ## 13. Testing
 
-`dotnet test` runs 183 tests:
+`dotnet test` runs 187 tests:
 
 - **Domain rules:** modifiers, proficiency, skills including half proficiency and expertise, saves, modifier stacking and Set, item attunement, clamping.
 - **Gameplay:** damage, temporary HP, massive damage, death saves in every combination, healing from 0, hit dice, resources, spell casting and upcasting, concentration.
@@ -223,6 +223,7 @@ The UI was verified by driving the running app through Windows UI Automation. Th
 - The update checksum isn't a signature (see §9). Update checks are off until `Updates:Owner/Repository` are configured.
 - A release package requires the .NET 10 Desktop Runtime (framework-dependent).
 - No undo/redo; autosave plus daily backups are the safety net.
+- Persistence calls are synchronous on the UI thread. They are fine for single-character documents, and could move to async if the store ever becomes remote.
 - Cloud sync runs at startup, every few minutes and on close, not after each save; there are no live updates between devices.
 - A free Supabase project pauses after about a week idle (a daily GitHub Actions request prevents it); while paused, sync reports "Cloud unavailable" and everything else works.
 - A character deleted elsewhere more than 90 days ago can come back from a machine that was offline the whole time (tombstones are purged after 90 days).
