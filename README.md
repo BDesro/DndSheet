@@ -74,7 +74,7 @@ git pull
 git checkout -b release/v1.2.0
 ```
 
-Set `<Version>1.2.0</Version>` in `Directory.Build.props`, then:
+Set `<Version>1.2.0</Version>` in `Directory.Build.props` and rewrite `RELEASE_NOTES.md` for the new version (plain text with `-` bullets, because the app's update dialog shows it as is), then:
 
 ```bash
 git commit -am "Release 1.2.0"
