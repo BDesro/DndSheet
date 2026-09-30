@@ -41,12 +41,12 @@ Design: `docs/superpowers/specs/2026-09-29-cloud-sync-design.md`.
 
 Use two data folders on one PC as two "installations":
 
-```bash
-dotnet run --project src/Hearthsheet.App -- --Application:DataDirectory=%TEMP%\hs-a
+```powershell
+dotnet run --project src/Hearthsheet.App -- --Application:DataDirectory=$env:TEMP\hs-a
 ```
 
-```bash
-dotnet run --project src/Hearthsheet.App -- --Application:DataDirectory=%TEMP%\hs-b
+```powershell
+dotnet run --project src/Hearthsheet.App -- --Application:DataDirectory=$env:TEMP\hs-b
 ```
 
 | # | Steps | Expected |

@@ -1,5 +1,7 @@
 -- Hearthsheet cloud sync. Run once in the Supabase SQL editor (see docs/CLOUD_SYNC.md).
 
+create extension if not exists pg_cron;
+
 create table public.characters (
   id             uuid primary key,
   user_id        uuid not null default auth.uid() references auth.users on delete cascade,
@@ -11,7 +13,7 @@ create table public.characters (
   revision       bigint not null default 1,
   updated_at     timestamptz not null default now()
 );
-create index characters_user_updated on public.characters (user_id, updated_at);
+create index characters_user_updated on public.characters (user_id, updated_at, id);
 
 -- The server owns revision, updated_at and ownership; clients cannot set them.
 create function public.characters_bump() returns trigger
@@ -35,7 +37,9 @@ create policy own_update on public.characters for update to authenticated
 
 grant select, insert, update on public.characters to authenticated;
 
+-- The keep-alive workflow queries as anon; with no anon policy, RLS returns [] but the request still reaches the database.
+grant select on public.characters to anon;
+
 -- Tombstone retention: 90 days (the app treats a machine as stale after 80).
-create extension if not exists pg_cron;
 select cron.schedule('purge-character-tombstones', '17 3 * * *',
   $$delete from public.characters where deleted_at < now() - interval '90 days'$$);
