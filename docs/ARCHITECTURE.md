@@ -244,7 +244,8 @@ The UI was verified by driving the running app through Windows UI Automation. Th
 ## 16. Cloud sync (optional)
 
 Local SQLite stays the source of truth; sync is opt-in by signing in (setup: `docs/CLOUD_SYNC.md`, design:
-`docs/superpowers/specs/2026-09-29-cloud-sync-design.md`).
+`docs/superpowers/specs/2026-09-29-cloud-sync-design.md`). The shipped `appsettings.json` points at the project's own Supabase
+instance; a fork sets its own `Sync:Url` (the bare project URL) and `Sync:AnonKey`.
 
 - **Local bookkeeping** (db version 2): `dirty`, `local_revision` (bumped on each save) and `cloud_revision` per row,
   a `pending_deletes` table, and `sync_account` / `sync_last_pull` in `meta`.

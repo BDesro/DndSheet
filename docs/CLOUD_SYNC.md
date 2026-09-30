@@ -3,19 +3,23 @@
 Cloud sync is optional. Without `Sync:Url` and `Sync:AnonKey` the app hides the Account menu and works exactly as before.
 Design: `docs/superpowers/specs/2026-09-29-cloud-sync-design.md`.
 
+The shipped `appsettings.json` already points at the project's Supabase instance. Follow the setup below only to create your own
+project, for example for a fork, and then replace those two values.
+
 ## One-time setup
 
 1. **Create the project.** At supabase.com, create a free project and pick the region closest to your players.
 2. **Create the schema.** In the SQL editor, run `supabase/migrations/0001_cloud_sync.sql`. If `create extension pg_cron` fails, enable
    **pg_cron** under Database → Extensions and run the file again.
-3. **Configure authentication** (Authentication → Sign In / Providers → Email):
+3. **Configure authentication.** Go to Authentication → Sign In / Providers, then click the **Email** row to expand it:
    - Email provider: **on**.
-   - **Confirm email: off**. Sign-up is then instant and sends no email.
+   - **Confirm email: off**, then Save. Sign-up is then instant and sends no email. The app expects a session straight from sign-up,
+     so it can't complete a confirmation-link flow.
    - Minimum password length: **8**. If your plan offers leaked-password protection, turn it on.
 4. **Set up Resend on your Cloudflare domain:**
    - Create a Resend account and choose Domains → Add domain (for example `mail.yourdomain.com`).
    - In Cloudflare DNS, add every record Resend lists, with the proxy **off** ("DNS only"). Then click Verify in Resend.
-   - Create a Resend API key with sending access.
+   - Create a Resend API key (API Keys → Create API Key) with **Sending access**, limited to that domain. Resend shows it only once.
 5. **Point Supabase at Resend** (Authentication → Emails → SMTP settings). Enable custom SMTP with:
    - Host `smtp.resend.com`
    - Port `465`
@@ -30,12 +34,18 @@ Design: `docs/superpowers/specs/2026-09-29-cloud-sync-design.md`.
      <h2>{{ .Token }}</h2>
      <p>Enter it in Hearthsheet. If you didn't ask for this, you can ignore this email.</p>
      ```
-7. **Configure the app.** From Project Settings → API, copy the **Project URL** and the **publishable** key (`sb_publishable_…`, or the
-   legacy `anon` key) into `src/Hearthsheet.App/appsettings.json` under `Sync:Url` and `Sync:AnonKey`, then commit. Both are public by design.
+7. **Configure the app.** Copy the **Project URL** and the **publishable** key into `src/Hearthsheet.App/appsettings.json` under
+   `Sync:Url` and `Sync:AnonKey`, then commit. Both are public by design.
    **Never** put the secret or `service_role` key in the app or the repository.
-8. **Keep the project awake.** In GitHub, go to Settings → Secrets and variables → Actions → **Variables** and add `SUPABASE_URL` and
-   `SUPABASE_ANON_KEY`. Then run **Supabase keep-alive** once from the Actions tab. GitHub disables scheduled workflows after
-   60 days without repository activity; if that happens, re-enable it from the Actions tab.
+   - The **Connect** button in the project's top bar shows both. The URL is also under Project Settings → Data API, and the keys are under
+     Project Settings → API Keys (the publishable key is `sb_publishable_…`; the old `anon` key on the Legacy API Keys tab also works).
+   - Use the **bare project URL**, `https://<ref>.supabase.co`, with no trailing slash and no `/rest/v1/`. The app and the keep-alive
+     workflow add their own paths, so a suffix makes every request fail with a 404.
+8. **Keep the project awake.** In GitHub, go to Settings → Secrets and variables → Actions → **Variables** → New repository variable, and
+   add `SUPABASE_URL` (the bare project URL) and `SUPABASE_ANON_KEY` (the publishable key). They are repository variables, not secrets and not
+   environment variables. Then open Actions → **Supabase keep-alive** → **Run workflow** (or `gh workflow run "Supabase keep-alive"`).
+   The workflow only appears there once it is on the default branch. A green run means the request reached the database. GitHub disables
+   scheduled workflows after 60 days without repository activity; if that happens, re-enable it from the Actions tab.
 
 ## Manual test script
 
@@ -74,3 +84,12 @@ set local request.jwt.claims = '{"sub":"<user B id>"}';
 select count(*) from public.characters where user_id = '<user A id>';  -- must be 0
 rollback;
 ```
+
+## Troubleshooting
+
+| Symptom | Cause and fix |
+|---|---|
+| Account dialog: "The sign-in service did not return a session" | **Confirm email** is still on (step 3). Turn it off, then delete the half-created user under Authentication → Users and create the account again. |
+| Keep-alive fails with exit code 22 | curl got an HTTP error. Check that `SUPABASE_URL` is the bare project URL (no `/rest/v1/`), that `SUPABASE_ANON_KEY` is the publishable key, and that the migration has been run. |
+| Reset email doesn't arrive | Check the spam folder and Resend's Emails log. If the log is empty, recheck the SMTP settings in step 5. |
+| Reset email contains a link instead of a code | The Reset password template still has the default body. Use the one in step 6. |
