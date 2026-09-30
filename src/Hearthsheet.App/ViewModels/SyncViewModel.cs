@@ -42,6 +42,7 @@ public sealed class SyncViewModel : Observable
     public bool IsConfigured => _cloud is not null;
     public bool IsSignedIn => _cloud?.Auth.IsSignedIn == true;
     public string AccountLabel => IsSignedIn ? $"Signed in as {_cloud!.Auth.Email}" : "Not signed in";
+    public string AccountEmail => IsSignedIn ? _cloud!.Auth.Email ?? "" : "";
     public bool IsBusy { get; private set => Set(ref field, value); }
     public string Status { get; private set => Set(ref field, value); } = "";
 
@@ -177,6 +178,7 @@ public sealed class SyncViewModel : Observable
         else _timer.Stop();
         Raise(nameof(IsSignedIn));
         Raise(nameof(AccountLabel));
+        Raise(nameof(AccountEmail));
         CommandManager.InvalidateRequerySuggested();
     }
 }
