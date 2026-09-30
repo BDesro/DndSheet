@@ -1,6 +1,7 @@
 name: Release
 # Push a tag like v1.2.0 (matching <Version> in Directory.Build.props) to publish a release that
 # installed copies of the app will offer as an update. Uses the workflow's own GITHUB_TOKEN — no PAT.
+# The release notes shown in the app's update dialog are RELEASE_NOTES.md: plain text, rewritten for each release.
 on:
   push:
     tags: ['v*.*.*']
@@ -34,6 +35,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           $tag = '${{ github.ref_name }}'
-          $args = @($tag, (Get-Item artifacts/*.zip).FullName, 'artifacts/SHA256SUMS.txt', '--title', "Hearthsheet $tag", '--generate-notes')
+          $args = @($tag, (Get-Item artifacts/*.zip).FullName, 'artifacts/SHA256SUMS.txt', '--title', "Hearthsheet $tag", '--notes-file', 'RELEASE_NOTES.md')
           if ($tag -match '-') { $args += '--prerelease' }
           gh release create @args
