@@ -48,6 +48,13 @@
                 <MenuItem Header="Zoom _out" Command="{Binding ZoomOut}" InputGestureText="Ctrl+−" />
                 <MenuItem Header="_Reset zoom" Command="{Binding ZoomReset}" InputGestureText="Ctrl+0" />
             </MenuItem>
+            <MenuItem Header="_Account" Visibility="{Binding Sync.IsConfigured, Converter={StaticResource VisibleWhen}}">
+                <MenuItem Header="{Binding Sync.AccountLabel}" IsEnabled="False" />
+                <Separator />
+                <MenuItem Header="_Sign in…" Command="{Binding Sync.SignIn}" />
+                <MenuItem Header="Sync _now" Command="{Binding Sync.SyncNow}" />
+                <MenuItem Header="Sign _out" Command="{Binding Sync.SignOut}" />
+            </MenuItem>
             <MenuItem Header="_Help">
                 <MenuItem Header="Check for _updates…" Command="{Binding Update.ShowDialog}" />
                 <MenuItem Header="GitHub _token (private releases)…" Command="{Binding ManageToken}" />
@@ -68,6 +75,9 @@
                 <Button DockPanel.Dock="Right" Margin="0,0,14,0" Padding="10,1" MinHeight="22" Command="{Binding Update.ShowDialog}"
                         Visibility="{Binding Update.IsUpdateAvailable, Converter={StaticResource VisibleWhen}}"
                         Content="{Binding Update.Available.Version}" ContentStringFormat="Update {0} available" />
+                <Button DockPanel.Dock="Right" Margin="0,0,14,0" Padding="8,1" MinHeight="22" Command="{Binding Sync.SyncNow}"
+                        Content="{Binding Sync.Status}" ToolTip="Sync now" AutomationProperties.Name="Cloud sync status. Sync now"
+                        Visibility="{Binding Sync.IsConfigured, Converter={StaticResource VisibleWhen}}" />
                 <TextBlock Text="{Binding SaveStatus}" Foreground="{StaticResource InkMuted}" VerticalAlignment="Center" />
             </DockPanel>
         </Border>

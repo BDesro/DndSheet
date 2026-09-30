@@ -11,9 +11,24 @@ public partial class MainWindow
 
     private MainViewModel? Vm => DataContext as MainViewModel;
 
-    private void OnClosing(object? sender, CancelEventArgs e)
+    private bool _readyToClose;
+
+    private async void OnClosing(object? sender, CancelEventArgs e)
     {
-        if (Vm is { } vm && !vm.OnClosing()) e.Cancel = true;
+        if (_readyToClose || Vm is not { } vm) return;
+        if (!vm.OnClosing())
+        {
+            e.Cancel = true;
+            return;
+        }
+        if (!vm.Sync.IsSignedIn) return;
+
+        // One last bounded sync pass, then close for real.
+        e.Cancel = true;
+        IsEnabled = false;
+        await vm.Sync.FinalSyncAsync();
+        _readyToClose = true;
+        Close();
     }
 
     private void OnExit(object sender, RoutedEventArgs e) => Close();

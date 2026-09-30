@@ -1,6 +1,7 @@
 using System.Reflection;
 using System.Runtime.InteropServices;
 using Hearthsheet.Infrastructure;
+using Hearthsheet.Infrastructure.Sync;
 using Hearthsheet.Infrastructure.Updates;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
@@ -21,7 +22,7 @@ public sealed class LoggingSettings
     public int RetainDays { get; set; } = 14;
 }
 
-public sealed record AppSettings(ApplicationSettings Application, LoggingSettings Logging, UpdateOptions Updates)
+public sealed record AppSettings(ApplicationSettings Application, LoggingSettings Logging, UpdateOptions Updates, SupabaseOptions Sync)
 {
     /// <summary>
     /// Layered configuration, later sources win: shipped appsettings.json → appsettings.Development.json
@@ -47,7 +48,8 @@ public sealed record AppSettings(ApplicationSettings Application, LoggingSetting
         return new AppSettings(
             config.GetSection("Application").Get<ApplicationSettings>() ?? new(),
             config.GetSection("Logging").Get<LoggingSettings>() ?? new(),
-            config.GetSection("Updates").Get<UpdateOptions>() ?? new());
+            config.GetSection("Updates").Get<UpdateOptions>() ?? new(),
+            config.GetSection("Sync").Get<SupabaseOptions>() ?? new());
     }
 
     public static string AppVersion { get; } =
