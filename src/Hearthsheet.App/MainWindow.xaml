@@ -24,7 +24,13 @@
     </Window.CommandBindings>
 
     <DockPanel>
-        <Menu DockPanel.Dock="Top" Background="{StaticResource Surface}" Padding="4,2">
+        <DockPanel DockPanel.Dock="Top" Background="{StaticResource Surface}">
+        <TextBlock DockPanel.Dock="Right" Margin="12,0" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
+                   AutomationProperties.Name="Signed in to cloud sync" ToolTip="Signed in to cloud sync"
+                   Visibility="{Binding Sync.IsSignedIn, Converter={StaticResource VisibleWhen}}">
+            <Run Text="●" Foreground="{StaticResource Good}" /> <Run Text="{Binding Sync.AccountEmail, Mode=OneWay}" />
+        </TextBlock>
+        <Menu Background="{StaticResource Surface}" Padding="4,2">
             <MenuItem Header="_File">
                 <MenuItem Header="_New character…" Command="{Binding NewCharacter}" InputGestureText="Ctrl+N" />
                 <MenuItem Header="_Duplicate character" Command="{Binding DuplicateCharacter}" />
@@ -63,6 +69,7 @@
                 <MenuItem Header="Open _data folder" Command="{Binding OpenDataFolder}" />
             </MenuItem>
         </Menu>
+        </DockPanel>
 
         <!-- Status bar -->
         <Border DockPanel.Dock="Bottom" Background="{StaticResource Sidebar}" BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0" Padding="12,4">
