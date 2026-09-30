@@ -88,7 +88,7 @@ public sealed class PortableCharacterFile(CharacterMigrator migrator)
         return character;
     }
 
-    private static void EnforceLimits(Character c)
+    internal static void EnforceLimits(Character c)
     {
         int[] counts =
         [

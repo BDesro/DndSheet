@@ -5,6 +5,7 @@ using Hearthsheet.Core.Content;
 using Hearthsheet.Core.Domain;
 using Hearthsheet.Core.Serialization;
 using Hearthsheet.Infrastructure.Security;
+using Hearthsheet.Infrastructure.Sync;
 using Hearthsheet.Infrastructure.Updates;
 using Microsoft.Win32;
 
@@ -50,6 +51,24 @@ public sealed class Dialogs
 
     public void ManageGitHubToken(ISecretStore store) =>
         new GitHubTokenDialog(store, GitHubReleaseSource.TokenKey) { Owner = Owner }.ShowDialog();
+
+    /// <returns>True when the user signed in (or created an account, or reset their password).</returns>
+    public bool SignIn(SupabaseAuth auth) =>
+        new AccountDialog(auth) { Owner = Owner }.ShowDialog() == true;
+
+    /// <returns>True to upload this computer's characters, false to keep them local only, null to cancel (sign out).</returns>
+    public bool? AccountSwitch() =>
+        Show("This computer's characters were synced with another account.\n\n" +
+             "Yes — upload them to this account\n" +
+             "No — keep them on this computer only\n" +
+             "Cancel — sign out\n\n" +
+             "Nothing is deleted either way.",
+             "Different account", MessageBoxButton.YesNoCancel, MessageBoxImage.Question) switch
+        {
+            MessageBoxResult.Yes => true,
+            MessageBoxResult.No => false,
+            _ => null,
+        };
 
     public string? OpenCharacterFile()
     {

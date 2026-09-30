@@ -22,7 +22,7 @@ Alternatives considered:
 
 MAUI has no real Windows advantage over WPF.
 
-**Dependencies are kept deliberately small.** The only packages are Microsoft.Data.Sqlite, Microsoft.Extensions.Logging and Microsoft.Extensions.Configuration, plus xUnit for tests. There is no MVVM toolkit (a 40-line `RelayCommand` and the domain's `Observable` base cover it), no DI container (one composition root in `App.xaml.cs`), and no logging framework (two sinks behind the standard `ILogger`).
+**Dependencies are kept deliberately small.** The only packages are Microsoft.Data.Sqlite, Microsoft.Extensions.Logging and Microsoft.Extensions.Configuration, plus xUnit for tests. There is no MVVM toolkit (a 40-line `RelayCommand` and the domain's `Observable` base cover it), no DI container (one composition root in `App.xaml.cs`), and no logging framework (two sinks behind the standard `ILogger`). Cloud sync talks to Supabase with plain `HttpClient`; it adds no packages.
 
 ## 2. Projects and layers
 
@@ -34,11 +34,13 @@ src/
     Application/           CharacterSession (change tracking), CharacterLibrary (use cases), ICharacterRepository
     Serialization/         JSON format, schema migrations, portable .dndchar files
     Content/               SRD 5.1 facts: class table, spell-slot progressions, CharacterFactory
+    Sync/                  Cloud sync algorithm and cloud contracts
   Hearthsheet.Infrastructure  Windows / I/O concerns
     Persistence/           SqliteCharacterRepository
     Logging/               ILoggerProvider with console + rolling-file sinks, secret redaction
     Security/              Windows Credential Manager secret store
     Updates/               SemVersion, GitHub release source, UpdateService
+    Sync/                  Supabase auth, character store, HTTP client
     AppPaths.cs            Per-user data locations, daily database backup
   Hearthsheet.Updater         Tiny console exe that swaps the install folder after the app exits
   Hearthsheet.App             WPF presentation: views, view models, dialogs, composition root
@@ -185,6 +187,8 @@ git tag vX.Y.Z → Release workflow (tests, scripts/publish.ps1, gh release crea
 | Database | Parameterized SQL only; per-user data folder |
 | Logging | No object dumps of secrets; regex redaction backstop |
 | Privilege | `asInvoker` manifest; per-user install; no admin rights ever needed |
+| Cloud account | Optional; Supabase Auth over HTTPS to one configured host; refresh session in Credential Manager only with "Stay signed in"; passwords never stored; tokens never logged (JWT redaction) |
+| Cloud data | Row-level security per user; the public anon/publishable key only; pulled rows go through the import validation pipeline |
 
 ## 12. UI notes
 
@@ -194,7 +198,7 @@ git tag vX.Y.Z → Release workflow (tests, scripts/publish.ps1, gh release crea
 
 ## 13. Testing
 
-`dotnet test` runs about 115 tests:
+`dotnet test` runs 187 tests:
 
 - **Domain rules:** modifiers, proficiency, skills including half proficiency and expertise, saves, modifier stacking and Set, item attunement, clamping.
 - **Gameplay:** damage, temporary HP, massive damage, death saves in every combination, healing from 0, hit dice, resources, spell casting and upcasting, concentration.
@@ -204,6 +208,7 @@ git tag vX.Y.Z → Release workflow (tests, scripts/publish.ps1, gh release crea
 - **Updates:** SemVer precedence, release selection (drafts and pre-releases), unconfigured source, HTTP errors, token scoping across redirects, checksum mismatch and missing entry, wrong-version package, corrupt zip, host allowlist, checksum parsing.
 - **Installer:** replace, rollback on mid-copy failure, refusing an invalid staging folder, argument validation.
 - **Logging:** secret redaction.
+- **Cloud sync:** local bookkeeping and the db upgrade; push/pull, conflicts, deletes vs edits, deferred changes to the open character, stale machines, account relinking and unreadable rows against an in-memory cloud; Supabase auth (remember me, token rotation, revoked and offline sessions, password reset) and store requests against a stub HTTP handler.
 
 The UI was verified by driving the running app through Windows UI Automation. The installer was verified end to end by upgrading a published 1.0.0 package to 1.0.1 with the real `Hearthsheet.Updater.exe`.
 
@@ -219,6 +224,9 @@ The UI was verified by driving the running app through Windows UI Automation. Th
 - A release package requires the .NET 10 Desktop Runtime (framework-dependent).
 - No undo/redo; autosave plus daily backups are the safety net.
 - Persistence calls are synchronous on the UI thread. They are fine for single-character documents, and could move to async if the store ever becomes remote.
+- Cloud sync runs at startup, every few minutes and on close, not after each save; there are no live updates between devices.
+- A free Supabase project pauses after about a week idle (a daily GitHub Actions request prevents it); while paused, sync reports "Cloud unavailable" and everything else works.
+- A character deleted elsewhere more than 90 days ago can come back from a machine that was offline the whole time (tombstones are purged after 90 days).
 
 ## 15. Extension points
 
@@ -232,3 +240,18 @@ The UI was verified by driving the running app through Windows UI Automation. Th
 | A different store | Implement `ICharacterRepository` and compose it in `App.xaml.cs` |
 | Bundled content | A data file loaded by `Content/`, respecting NOTICE.md |
 | Signed updates | Verify the signature in `UpdateService.VerifyStagedPackage` / `DownloadAndStageAsync` |
+
+## 16. Cloud sync (optional)
+
+Local SQLite stays the source of truth; sync is opt-in by signing in (setup: `docs/CLOUD_SYNC.md`, design:
+`docs/superpowers/specs/2026-09-29-cloud-sync-design.md`).
+
+- **Local bookkeeping** (db version 2): `dirty`, `local_revision` (bumped on each save) and `cloud_revision` per row,
+  a `pending_deletes` table, and `sync_account` / `sync_last_pull` in `meta`.
+- **A pass** (`CloudSync`, one at a time): push tombstones for pending deletes → push dirty rows with a
+  revision-conditional update → pull rows changed since the last pull (minus a 2-minute overlap). The pass never writes
+  the open character; its remote changes are returned as deferred changes and applied on the UI thread.
+- **Conflicts:** the cloud version wins, and the local one is saved as "Name (conflict copy, date)". An edit beats a delete.
+- **Triggers:** startup, sign-in, every `Sync:IntervalMinutes` (default 5), "Sync now", and on close (5-second cap).
+- **Server** (`supabase/migrations/0001_cloud_sync.sql`): one `characters` table, a trigger that owns `revision`/`updated_at`,
+  per-user RLS, and a daily `pg_cron` purge of tombstones older than 90 days.

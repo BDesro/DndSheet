@@ -480,3 +480,6 @@ $RECYCLE.BIN/
 
 # Vim temporary swap files
 *.swp
+
+# graphify knowledge graph (local navigation aid)
+graphify-out/

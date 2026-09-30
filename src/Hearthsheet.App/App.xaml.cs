@@ -5,10 +5,12 @@ using Hearthsheet.App.ViewModels;
 using Hearthsheet.Core.Application;
 using Hearthsheet.Core.Rules;
 using Hearthsheet.Core.Serialization;
+using Hearthsheet.Core.Sync;
 using Hearthsheet.Infrastructure;
 using Hearthsheet.Infrastructure.Logging;
 using Hearthsheet.Infrastructure.Persistence;
 using Hearthsheet.Infrastructure.Security;
+using Hearthsheet.Infrastructure.Sync;
 using Hearthsheet.Infrastructure.Updates;
 using Microsoft.Extensions.Logging;
 
@@ -53,6 +55,8 @@ public partial class App
             AppSettings.AppVersion, AppSettings.BuildConfiguration, dev);
         _log.LogDebug("Data directory: {Dir}", paths.Root);
         _log.LogDebug("Update source: {Owner}/{Repo} (enabled {Enabled})", settings.Updates.Owner, settings.Updates.Repository, settings.Updates.Enabled);
+        if (!string.IsNullOrWhiteSpace(settings.Sync.Url) && !settings.Sync.IsConfigured)
+            _log.LogWarning("Cloud sync is disabled: Sync:Url must be an https URL and Sync:AnonKey must be set");
 
         MainViewModel main;
         try
@@ -95,8 +99,18 @@ public partial class App
         var updates = new UpdateService(releaseSource, settings.Updates, SemVersion.Parse(AppSettings.AppVersion),
             paths.Updates, factory.CreateLogger<UpdateService>());
 
+        CloudServices? cloud = null;
+        if (settings.Sync.IsConfigured)
+        {
+            var http = new SupabaseHttp(settings.Sync, userAgentVersion: AppSettings.AppVersion);
+            var auth = new SupabaseAuth(http, secrets);
+            var sync = new CloudSync(repository, repository, new SupabaseCharacterStore(http, auth), auth,
+                migrator, factory.CreateLogger<CloudSync>());
+            cloud = new CloudServices(auth, sync, settings.Sync);
+        }
+
         return new MainViewModel(new MainServices(
-            library, RestService.CreateDefault(), updates, settings, paths, secrets, new Dialogs(), factory));
+            library, RestService.CreateDefault(), updates, settings, paths, secrets, new Dialogs(), factory, cloud));
     }
 
     private void InstallCrashHandlers()

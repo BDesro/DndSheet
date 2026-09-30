@@ -8,6 +8,7 @@ using Hearthsheet.Core.Application;
 using Hearthsheet.Core.Domain;
 using Hearthsheet.Core.Rules;
 using Hearthsheet.Core.Serialization;
+using Hearthsheet.Core.Sync;
 using Hearthsheet.Infrastructure;
 using Hearthsheet.Infrastructure.Security;
 using Hearthsheet.Infrastructure.Updates;
@@ -18,7 +19,7 @@ namespace Hearthsheet.App.ViewModels;
 
 public sealed record MainServices(
     CharacterLibrary Library, RestService Rest, UpdateService Updates, AppSettings Settings, AppPaths Paths,
-    ISecretStore Secrets, Dialogs Dialogs, ILoggerFactory Loggers);
+    ISecretStore Secrets, Dialogs Dialogs, ILoggerFactory Loggers, CloudServices? Cloud);
 
 /// <summary>Shell: the character list, the open character, saving/autosave, import/export and updates.</summary>
 public sealed class MainViewModel : Observable
@@ -34,6 +35,7 @@ public sealed class MainViewModel : Observable
         _autosave = new DispatcherTimer { Interval = TimeSpan.FromSeconds(Math.Max(0.5, services.Settings.Application.AutosaveDelaySeconds)) };
         _autosave.Tick += (_, _) => Save();
         Update = new UpdateViewModel(services.Updates, services.Paths, services.Dialogs, services.Settings.Updates, _log, BeforeUpdateShutdown);
+        Sync = new SyncViewModel(services.Cloud, this, services.Dialogs, services.Loggers.CreateLogger<SyncViewModel>());
 
         NewCharacter = new RelayCommand(CreateCharacter);
         DuplicateCharacter = new RelayCommand(Duplicate, () => Current is not null);
@@ -52,6 +54,11 @@ public sealed class MainViewModel : Observable
 
     public ObservableCollection<CharacterSummary> Characters { get; } = [];
     public UpdateViewModel Update { get; }
+    public SyncViewModel Sync { get; }
+
+    // Read by the background sync pass, so it is published through a volatile reference.
+    private volatile Character? _openCharacter;
+    public Guid? OpenCharacterId => _openCharacter?.Id;
     public string AppVersion => AppSettings.AppVersion;
     public bool IsDevelopmentMode => _s.Settings.Application.DevelopmentMode;
 
@@ -74,6 +81,7 @@ public sealed class MainViewModel : Observable
         {
             field?.Dispose();
             field = value;
+            _openCharacter = value?.Character;
             Raise();
             Raise(nameof(HasCharacter));
         }
@@ -108,6 +116,7 @@ public sealed class MainViewModel : Observable
         SelectedSummary = Characters.FirstOrDefault();
         if (_s.Settings.Updates.Enabled && _s.Settings.Updates.CheckOnStartup && _s.Settings.Updates.IsConfigured)
             _ = Update.CheckInBackgroundAsync();
+        _ = Sync.StartAsync();
     }
 
     /// <summary>Called when the window is closing. Returns false to cancel the close.</summary>
@@ -192,6 +201,62 @@ public sealed class MainViewModel : Observable
             _s.Dialogs.Error($"The character could not be saved:\n\n{ex.Message}");
             return false;
         }
+    }
+
+    /// <summary>
+    /// Applies a finished sync pass: remote changes to the open character (deferred by the pass so its
+    /// autosave can't overwrite them), then the refreshed list.
+    /// </summary>
+    public void ApplySyncResult(SyncResult result)
+    {
+        string? status = null;
+        foreach (var change in result.Deferred)
+        {
+            var open = Current?.Character.Id == change.Id ? Current : null;
+            var copy = _s.Cloud!.Sync.ApplyDeferred(change, open?.Character, open?.Session.IsDirty == true);
+            if (open is null) continue;
+
+            _autosave.Stop();
+            Current = null; // drop the stale in-memory model without saving it
+            if (change.Remote is not null)
+            {
+                Open(change.Id);
+                status = copy is null
+                    ? "Updated from another device"
+                    : "Updated from another device — your edits were kept as a conflict copy";
+            }
+            else if (copy is not null)
+            {
+                Open(copy.Id);
+                status = "Deleted on another device — your edits were kept as a new character";
+            }
+            else
+            {
+                status = "This character was deleted on another device";
+            }
+        }
+        if (!result.HasChanges) return;
+        ReloadList(Current?.Character.Id);
+        if (Current is null) SelectedSummary = Characters.FirstOrDefault();
+        if (status is not null) SaveStatus = status;
+    }
+
+    /// <summary>Runs an operation that rewrites character ids with no character open. False if the open one couldn't be saved.</summary>
+    public bool WithCharacterClosed(Action action)
+    {
+        if (!Save()) return false;
+        Current = null;
+        SelectedSummary = null;
+        try
+        {
+            action();
+        }
+        finally
+        {
+            ReloadList();
+            SelectedSummary = Characters.FirstOrDefault();
+        }
+        return true;
     }
 
     /// <summary>Keeps the sidebar entry (name, class, level) in step with edits without reloading everything.</summary>

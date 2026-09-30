@@ -1,0 +1,21 @@
+name: Supabase keep-alive
+
+# Free Supabase projects pause after about a week without activity. One small daily query prevents that.
+on:
+  schedule:
+    - cron: "23 7 * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  ping:
+    if: vars.SUPABASE_URL != ''
+    runs-on: ubuntu-latest
+    steps:
+      - name: Query the characters table
+        env:
+          SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ vars.SUPABASE_ANON_KEY }}
+        # Row-level security returns [] for the anonymous key, but the request still reaches the database.
+        run: curl --fail --silent --show-error --max-time 30 "$SUPABASE_URL/rest/v1/characters?select=id&limit=1" -H "apikey: $SUPABASE_ANON_KEY"
