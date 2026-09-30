@@ -82,6 +82,7 @@ public partial class AccountDialog
                     await _auth.ResetPasswordAsync(email, CodeBox.Text.Trim(), PasswordBox.Password, remember, CancellationToken.None);
                     break;
             }
+            _busy = false;
             DialogResult = true;
         }
         catch (CloudException ex)
