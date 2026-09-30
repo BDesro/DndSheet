@@ -18,4 +18,5 @@ jobs:
           SUPABASE_URL: ${{ vars.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ vars.SUPABASE_ANON_KEY }}
         # Row-level security returns [] for the anonymous key, but the request still reaches the database.
-        run: curl --fail --silent --show-error --max-time 30 "$SUPABASE_URL/rest/v1/characters?select=id&limit=1" -H "apikey: $SUPABASE_ANON_KEY"
+        run: |
+          curl --fail --silent --show-error --max-time 30 "$SUPABASE_URL/rest/v1/characters?select=id&limit=1" -H "apikey: $SUPABASE_ANON_KEY"
