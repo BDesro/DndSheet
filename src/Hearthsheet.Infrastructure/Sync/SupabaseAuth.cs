@@ -64,14 +64,28 @@ public sealed class SupabaseAuth(SupabaseHttp http, ISecretStore secrets, TimePr
         if (!response.IsSuccess) throw new CloudRequestException(response.ErrorMessage());
     }
 
-    /// <summary>Verifying the code signs the user in; the new password is then set on that session.</summary>
+    /// <summary>
+    /// Verifying the code signs the user in; the new password is then set on that session. If it can't be set,
+    /// the code is already spent, so the session is forgotten rather than left half signed in.
+    /// </summary>
     public async Task ResetPasswordAsync(string email, string code, string newPassword, bool remember, CancellationToken ct)
     {
         await StartSessionAsync("auth/v1/verify",
             new JsonObject { ["type"] = "recovery", ["email"] = email, ["token"] = code }, remember, ct);
         var response = await http.SendAsync(HttpMethod.Put, "auth/v1/user",
             new JsonObject { ["password"] = newPassword }, await GetAccessTokenAsync(ct), ct);
-        if (!response.IsSuccess) throw new CloudRequestException(response.ErrorMessage());
+        if (response.IsSuccess) return;
+
+        await _lock.WaitAsync(ct);
+        try
+        {
+            Forget();
+        }
+        finally
+        {
+            _lock.Release();
+        }
+        throw new CloudRequestException($"{response.ErrorMessage()} Request a new code and try again.");
     }
 
     /// <summary>Forgets the session locally and revokes it on the server (best effort).</summary>

@@ -177,6 +177,20 @@ public class SupabaseAuthTests
     }
 
     [Fact]
+    public async Task PasswordReset_WhenThePasswordIsRejected_SignsOut()
+    {
+        var (auth, _) = Create(r => r.PathAndQuery == "/auth/v1/verify"
+            ? Ok(SupabaseStub.Session("a1", "r1"))
+            : SupabaseStub.Json(HttpStatusCode.UnprocessableEntity, """{"msg":"New password should be different from the old password."}"""));
+
+        var ex = await Assert.ThrowsAsync<CloudRequestException>(
+            () => auth.ResetPasswordAsync("a@b.c", "123456", "password1", remember: true, default));
+        Assert.Contains("Request a new code", ex.Message);
+        Assert.False(auth.IsSignedIn);
+        Assert.False(_secrets.ContainsKey(SupabaseAuth.SecretKey));
+    }
+
+    [Fact]
     public async Task SignOut_RevokesTheSession_AndForgetsIt()
     {
         var (auth, stub) = Create(r => r.PathAndQuery == "/auth/v1/logout"
