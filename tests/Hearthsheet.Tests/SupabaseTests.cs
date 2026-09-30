@@ -269,6 +269,9 @@ public class SupabaseCharacterStoreTests
         Assert.Equal("return=representation", request.Prefer);
         Assert.Contains("\"deleted_at\":null", request.Body);
         Assert.Contains("\"identity\":{\"name\":\"A\"}", request.Body); // data is sent as JSON, not a string
+        Assert.DoesNotContain("user_id", request.Body);
+        Assert.DoesNotContain("\"revision\"", request.Body);
+        Assert.DoesNotContain("updated_at", request.Body);
         Assert.Equal(4, row!.Revision);
         Assert.Contains("identity", row.Data);
     }
@@ -283,8 +286,12 @@ public class SupabaseCharacterStoreTests
     [Fact]
     public async Task Insert_ExistingId_ReturnsNull()
     {
-        var (store, _, _) = Create(_ => SupabaseStub.Json(HttpStatusCode.Conflict, """{"message":"duplicate key"}"""));
+        var (store, stub, _) = Create(_ => SupabaseStub.Json(HttpStatusCode.Conflict, """{"message":"duplicate key"}"""));
         Assert.Null(await store.InsertAsync(Upload, default));
+        var body = stub.Requests[0].Body;
+        Assert.DoesNotContain("user_id", body);
+        Assert.DoesNotContain("\"revision\"", body);
+        Assert.DoesNotContain("updated_at", body);
     }
 
     [Fact]
@@ -306,16 +313,22 @@ public class SupabaseCharacterStoreTests
     }
 
     [Fact]
-    public async Task ChangedSince_PagesThroughAllRows()
+    public async Task ChangedSince_PagesByKey_SoConcurrentEditsAreNotSkipped()
     {
-        var page = "[" + string.Join(",", Enumerable.Range(0, 500).Select(_ => RowJson(Guid.NewGuid(), 1))) + "]";
-        var (store, stub, _) = Create(r => Ok(r.PathAndQuery.Contains("offset=0") ? page : $"[{RowJson(Guid.NewGuid(), 1)}]"));
+        var ids = Enumerable.Range(0, 500).Select(_ => Guid.NewGuid()).ToList();
+        var page = "[" + string.Join(",", ids.Select(id => RowJson(id, 1))) + "]";
+        var calls = 0;
+        var (store, stub, _) = Create(_ => Ok(++calls == 1 ? page : $"[{RowJson(Guid.NewGuid(), 1)}]"));
 
         var rows = await store.ChangedSinceAsync(new DateTimeOffset(2026, 9, 29, 9, 0, 0, TimeSpan.Zero), default);
         Assert.Equal(501, rows.Count);
         Assert.Equal(2, stub.Requests.Count);
-        Assert.Contains("updated_at=gt.", stub.Requests[0].PathAndQuery);
-        Assert.Contains("order=updated_at.asc", stub.Requests[0].PathAndQuery);
+        Assert.Contains("updated_at=gt.2026-09-29T09%3A00%3A00.000000Z", stub.Requests[0].PathAndQuery);
+        Assert.Contains("order=updated_at.asc,id.asc", stub.Requests[0].PathAndQuery);
+        var second = stub.Requests[1].PathAndQuery;
+        Assert.Contains("or=(updated_at.gt.2026-09-29T10%3A00%3A00.123456Z,and(updated_at.eq.2026-09-29T10%3A00%3A00.123456Z,id.gt." + ids[^1] + "))", second);
+        Assert.DoesNotContain("offset=", stub.Requests[0].PathAndQuery);
+        Assert.DoesNotContain("offset=", second);
     }
 
     [Fact]

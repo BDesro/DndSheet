@@ -46,17 +46,26 @@ public sealed class SupabaseCharacterStore(SupabaseHttp http, ICloudSession sess
 
     public async Task<IReadOnlyList<CloudRow>> ChangedSinceAsync(DateTimeOffset? since, CancellationToken ct)
     {
-        var filter = since is { } s
-            ? "&updated_at=gt." + Uri.EscapeDataString(s.UtcDateTime.ToString("yyyy-MM-ddTHH:mm:ss.ffffffZ", CultureInfo.InvariantCulture))
-            : "";
+        var filter = since is { } s ? "&updated_at=gt." + Cursor(s) : "";
         var rows = new List<CloudRow>();
-        for (var offset = 0; ; offset += PageSize)
+        while (true)
         {
+            // Keyset paging: an offset would skip rows when another device edits one between page fetches.
+            var after = rows.Count == 0 ? "" : KeysetFilter(rows[^1]);
             var page = Rows(await SendAsync(HttpMethod.Get,
-                $"{Table}?{Columns}{filter}&order=updated_at.asc,id.asc&limit={PageSize}&offset={offset}", null, ct));
+                $"{Table}?{Columns}{filter}{after}&order=updated_at.asc,id.asc&limit={PageSize}", null, ct));
             rows.AddRange(page);
             if (page.Count < PageSize) return rows;
         }
+    }
+
+    private static string Cursor(DateTimeOffset value) =>
+        Uri.EscapeDataString(value.UtcDateTime.ToString("yyyy-MM-ddTHH:mm:ss.ffffffZ", CultureInfo.InvariantCulture));
+
+    private static string KeysetFilter(CloudRow last)
+    {
+        var t = Cursor(last.UpdatedAt);
+        return $"&or=(updated_at.gt.{t},and(updated_at.eq.{t},id.gt.{last.Id}))";
     }
 
     public async Task<IReadOnlySet<Guid>> ListAllIdsAsync(CancellationToken ct)
