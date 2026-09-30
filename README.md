@@ -10,7 +10,7 @@ One character model drives three views:
 | **Details** | The same character organized by category (Identity, Abilities & Saves, Skills, Combat, Proficiencies, Features, Equipment, Spells, Resources, Conditions & Effects, Biography) for comfortable editing. |
 | **Play** | A session dashboard: damage/heal/temp HP, death saves, short and long rests, resources, spell slots, casting, conditions, effects, quick-add, and a session log. |
 
-Characters are stored locally in SQLite, autosaved, backed up daily, and can be exported/imported as portable `.dndchar` files. The app checks GitHub Releases for updates and installs them after verifying the package checksum.
+Characters are stored locally in SQLite, autosaved, backed up daily, and can be exported/imported as portable `.dndchar` files. The app checks GitHub Releases for updates and installs them after verifying the package checksum. Signing in to an optional cloud account (Account menu) keeps your characters in sync across computers; local storage stays the source of truth and everything keeps working offline.
 
 ## Requirements
 
@@ -119,6 +119,8 @@ Settings are layered. Later sources override earlier ones, so no binary has to c
 | `Updates:Owner` / `Updates:Repository` | *(empty)* | The GitHub repository whose releases are the update source. Update checks are off until these are set. |
 | `Updates:CheckOnStartup` | `true` | Silent check at startup; a status-bar button appears when an update exists. |
 | `Updates:AllowPreRelease` | `false` | Offer `-beta` style releases. |
+| `Sync:Url` / `Sync:AnonKey` | *(the project's Supabase instance)* | The Supabase project URL and its public publishable key. When empty, the Account menu and sync are hidden. See [docs/CLOUD_SYNC.md](docs/CLOUD_SYNC.md) to use your own project. |
+| `Sync:IntervalMinutes` | `5` | How often a signed-in app syncs in the background. |
 
 ## Where things are stored
 
@@ -129,6 +131,7 @@ Settings are layered. Later sources override earlier ones, so no binary has to c
 | Logs | `%LOCALAPPDATA%\Hearthsheet\logs\app-YYYYMMDD.log`. In the app: Help → Open log folder |
 | Updater log | `%LOCALAPPDATA%\Hearthsheet\logs\updater.log` |
 | GitHub token (optional) | Windows Credential Manager → Windows Credentials → `Hearthsheet/GitHubToken` |
+| Cloud session (optional, only with "Stay signed in") | Windows Credential Manager → Windows Credentials → `Hearthsheet/supabase-session` |
 
 ## Keyboard shortcuts
 
@@ -137,6 +140,7 @@ Ctrl+N new character · Ctrl+S save · Ctrl+P print sheet · Ctrl+1/2/3 Sheet/De
 ## More documentation
 
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): stack choice, layers, domain model, persistence, updates, security, testing, limitations and extension points
+- [docs/CLOUD_SYNC.md](docs/CLOUD_SYNC.md): setting up the optional cloud sync (Supabase, Resend), the manual test script and troubleshooting
 - [NOTICE.md](NOTICE.md): intellectual-property and licensing notes
 
 ## License
