@@ -12,10 +12,16 @@ public partial class MainWindow
     private MainViewModel? Vm => DataContext as MainViewModel;
 
     private bool _readyToClose;
+    private bool _finalSyncing;
 
     private async void OnClosing(object? sender, CancelEventArgs e)
     {
         if (_readyToClose || Vm is not { } vm) return;
+        if (_finalSyncing)
+        {
+            e.Cancel = true;
+            return;
+        }
         if (!vm.OnClosing())
         {
             e.Cancel = true;
@@ -26,9 +32,16 @@ public partial class MainWindow
         // One last bounded sync pass, then close for real.
         e.Cancel = true;
         IsEnabled = false;
-        await vm.Sync.FinalSyncAsync();
-        _readyToClose = true;
-        Close();
+        _finalSyncing = true;
+        try
+        {
+            await vm.Sync.FinalSyncAsync();
+        }
+        finally
+        {
+            _readyToClose = true;
+            Close();
+        }
     }
 
     private void OnExit(object sender, RoutedEventArgs e) => Close();

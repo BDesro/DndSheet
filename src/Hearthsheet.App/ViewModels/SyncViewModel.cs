@@ -30,7 +30,8 @@ public sealed class SyncViewModel : Observable
         _main = main;
         _dialogs = dialogs;
         _log = log;
-        _timer.Interval = TimeSpan.FromMinutes(Math.Max(1, cloud?.Options.IntervalMinutes ?? 5));
+        var minutes = cloud?.Options.IntervalMinutes ?? 5;
+        _timer.Interval = TimeSpan.FromMinutes(Math.Clamp(double.IsFinite(minutes) ? minutes : 5, 1, 1440));
         _timer.Tick += (_, _) => _ = RunAsync();
         SignIn = new RelayCommand(() => _ = SignInAsync(), () => IsConfigured && !IsSignedIn);
         SignOut = new RelayCommand(() => _ = SignOutAsync(), () => IsSignedIn);
@@ -61,13 +62,14 @@ public sealed class SyncViewModel : Observable
     public async Task RunAsync(bool final = false)
     {
         if (_cloud is null || !IsSignedIn || (IsBusy && !final)) return;
-        if (!final) _main.Save(); // the open character's edits go out with this pass
         IsBusy = true;
         Status = "Syncing…";
         using var limit = new CancellationTokenSource();
         if (final) limit.CancelAfter(FinalSyncLimit);
         try
         {
+            // The open character's unsaved edits go out with this pass; an unedited one must not be marked dirty.
+            if (!final && _main.Current?.Session.IsDirty == true) _main.Save();
             var sync = _cloud.Sync;
             var result = await Task.Run(() => sync.RunAsync(() => _main.OpenCharacterId, waitIfBusy: final, limit.Token), limit.Token);
             await ApplyAsync(result);
@@ -125,8 +127,20 @@ public sealed class SyncViewModel : Observable
     private async Task SignInAsync()
     {
         if (_cloud is null || !_dialogs.SignIn(_cloud.Auth)) return;
-        if (!await ConfirmAccountLinkAsync()) return;
-        _log.LogInformation("Signed in to cloud sync");
+        try
+        {
+            if (!await ConfirmAccountLinkAsync()) return;
+            _log.LogInformation("Signed in to cloud sync");
+        }
+        catch (Exception ex)
+        {
+            _log.LogError(ex, "Linking the cloud account failed");
+            Status = "Sign-in failed — see the log";
+            try { await _cloud.Auth.SignOutAsync(CancellationToken.None); }
+            catch (Exception signOutEx) { _log.LogWarning(signOutEx, "Sign-out after a failed link also failed"); }
+            OnAccountChanged();
+            return;
+        }
         OnAccountChanged();
         await RunAsync();
     }
