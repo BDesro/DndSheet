@@ -1,4 +1,5 @@
 using System.Windows;
+using System.Windows.Automation;
 using Hearthsheet.Core.Sync;
 using Hearthsheet.Infrastructure.Sync;
 
@@ -11,6 +12,7 @@ public partial class AccountDialog
 
     private readonly SupabaseAuth _auth;
     private Mode _mode;
+    private bool _busy;
 
     public AccountDialog(SupabaseAuth auth)
     {
@@ -18,6 +20,7 @@ public partial class AccountDialog
         _auth = auth;
         Show(Mode.SignIn);
         Loaded += (_, _) => EmailBox.Focus();
+        Closing += (_, e) => e.Cancel = _busy;
     }
 
     private void OnShowCreate(object sender, RoutedEventArgs e) => Show(Mode.Create);
@@ -32,11 +35,12 @@ public partial class AccountDialog
             Mode.SignIn => ("Sign in", "Sign in"),
             Mode.Create => ("Create account", "Create account"),
             Mode.RequestCode => ("Reset password", "Send code"),
-            _ => ("Reset password", "Reset password"),
+            _ => ("Reset password", "Reset"),
         };
         CodeField.Visibility = Visible(mode == Mode.Reset);
         PasswordField.Visibility = Visible(mode != Mode.RequestCode);
         PasswordField.Header = mode == Mode.Reset ? "New password" : "Password";
+        AutomationProperties.SetName(PasswordBox, mode == Mode.Reset ? "New password" : "Password");
         ConfirmField.Visibility = Visible(mode is Mode.Create or Mode.Reset);
         RememberBox.Visibility = Visible(mode != Mode.RequestCode);
         CreateLink.Visibility = Visible(mode == Mode.SignIn);
@@ -55,6 +59,7 @@ public partial class AccountDialog
             Feedback.Text = problem;
             return;
         }
+        _busy = true;
         IsEnabled = false;
         Feedback.Text = "Working…";
         try
@@ -88,6 +93,7 @@ public partial class AccountDialog
             PasswordBox.Clear();
             ConfirmBox.Clear();
             IsEnabled = true;
+            _busy = false;
         }
     }
 

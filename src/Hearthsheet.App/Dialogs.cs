@@ -58,7 +58,7 @@ public sealed class Dialogs
 
     /// <returns>True to upload this computer's characters, false to keep them local only, null to cancel (sign out).</returns>
     public bool? AccountSwitch() =>
-        Show("This computer's characters were synced with a different account.\n\n" +
+        Show("This computer's characters were synced with another account.\n\n" +
              "Yes — upload them to this account\n" +
              "No — keep them on this computer only\n" +
              "Cancel — sign out\n\n" +
