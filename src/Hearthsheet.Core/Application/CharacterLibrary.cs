@@ -17,26 +17,10 @@ public interface ICharacterRepository
     bool Delete(Guid id);
 }
 
-/// <summary>Use cases for managing the set of characters (create, duplicate, import/export…).</summary>
+/// <summary>Use cases that create characters or move them in and out of files (create, duplicate, import/export).</summary>
 public sealed class CharacterLibrary(
-    ICharacterRepository repository, PortableCharacterFile portable, CharacterMigrator migrator,
-    string appVersion, ILogger<CharacterLibrary> logger)
+    ICharacterRepository repository, PortableCharacterFile portable, string appVersion, ILogger<CharacterLibrary> logger)
 {
-    public IReadOnlyList<CharacterSummary> List() => repository.List();
-
-    public Character? Load(Guid id)
-    {
-        var c = repository.Load(id);
-        logger.LogInformation("Character loaded: {Name} ({Id})", c?.Identity.Name, id);
-        return c;
-    }
-
-    public void Save(Character c)
-    {
-        repository.Save(c);
-        logger.LogInformation("Character saved: {Name}", c.Identity.Name);
-    }
-
     public Character Create(NewCharacterOptions options)
     {
         var c = CharacterFactory.Create(options);
@@ -47,19 +31,12 @@ public sealed class CharacterLibrary(
 
     public Character Duplicate(Character source)
     {
-        var copy = CharacterJson.Clone(source, migrator);
+        var copy = CharacterJson.Clone(source);
         copy.Id = Guid.NewGuid();
         copy.Identity.Name = source.Identity.Name + " (copy)";
         repository.Save(copy);
         logger.LogInformation("Character duplicated: {Name}", copy.Identity.Name);
         return copy;
-    }
-
-    public bool Delete(Guid id)
-    {
-        var deleted = repository.Delete(id);
-        logger.LogInformation("Character deleted: {Id} (found: {Found})", id, deleted);
-        return deleted;
     }
 
     public void Export(Character c, string path)

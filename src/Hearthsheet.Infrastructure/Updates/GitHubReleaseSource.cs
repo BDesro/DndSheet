@@ -2,7 +2,6 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using Hearthsheet.Infrastructure.Security;
 
 namespace Hearthsheet.Infrastructure.Updates;
 
@@ -13,37 +12,31 @@ public sealed class UpdateOptions
     /// <summary>GitHub owner/organization that publishes releases.</summary>
     public string Owner { get; set; } = "";
     public string Repository { get; set; } = "";
-    public bool AllowPreRelease { get; set; }
 
     public bool IsConfigured => !string.IsNullOrWhiteSpace(Owner) && !string.IsNullOrWhiteSpace(Repository);
 }
 
 public sealed record ReleaseAsset(long Id, string Name, long Size, string ApiUrl);
 
-public sealed record ReleaseInfo(SemVersion Version, string Tag, string Name, string Notes, bool PreRelease, IReadOnlyList<ReleaseAsset> Assets);
+public sealed record ReleaseInfo(Version Version, string Tag, string Name, string Notes, IReadOnlyList<ReleaseAsset> Assets);
 
 public sealed class UpdateException(string message, Exception? inner = null) : Exception(message, inner);
 
 /// <summary>
-/// Reads versioned release artifacts from the GitHub Releases API. Public repositories need no
-/// credentials; for a private repository (development) an optional fine-grained PAT with read-only
-/// "Contents" access is read from the OS secret store and sent only to api.github.com.
+/// Reads versioned release artifacts from the GitHub Releases API of a public repository (no credentials).
 /// </summary>
 public sealed class GitHubReleaseSource
 {
-    public const string TokenKey = "GitHubToken";
     private const string ApiHost = "api.github.com";
     private const int MaxRedirects = 5;
 
     private readonly HttpClient _http;
     private readonly UpdateOptions _options;
-    private readonly ISecretStore? _secrets;
 
-    /// <param name="handler">Must not auto-follow redirects; redirects are followed manually so the token is never forwarded.</param>
-    public GitHubReleaseSource(UpdateOptions options, ISecretStore? secrets, HttpMessageHandler? handler = null, string userAgentVersion = "1.0")
+    /// <param name="handler">Must not auto-follow redirects; redirects are followed manually so every hop is checked against the trusted hosts.</param>
+    public GitHubReleaseSource(UpdateOptions options, HttpMessageHandler? handler = null, string userAgentVersion = "1.0")
     {
         _options = options;
-        _secrets = secrets;
         _http = new HttpClient(handler ?? new SocketsHttpHandler { AllowAutoRedirect = false })
         {
             Timeout = TimeSpan.FromMinutes(10),
@@ -59,9 +52,9 @@ public sealed class GitHubReleaseSource
 
         using var response = await SendAsync(url, "application/vnd.github+json", ct);
         if (response.StatusCode == HttpStatusCode.NotFound)
-            throw new UpdateException("The update repository was not found. If it is private, a GitHub token is required.");
+            throw new UpdateException("The update repository was not found.");
         if (response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
-            throw new UpdateException($"GitHub refused the request ({(int)response.StatusCode}). The token may be invalid or rate limits exceeded.");
+            throw new UpdateException($"GitHub refused the request ({(int)response.StatusCode}). Rate limits may be exceeded.");
         if (!response.IsSuccessStatusCode)
             throw new UpdateException($"GitHub returned {(int)response.StatusCode} while checking for updates.");
 
@@ -79,8 +72,8 @@ public sealed class GitHubReleaseSource
         var result = new List<ReleaseInfo>();
         foreach (var r in releases ?? [])
         {
-            if (r.Draft || !SemVersion.TryParse(r.TagName, out var version)) continue;
-            result.Add(new ReleaseInfo(version, r.TagName ?? "", r.Name ?? r.TagName ?? "", r.Body ?? "", r.PreRelease,
+            if (r.Draft || r.PreRelease || !UpdateService.TryParseVersion(r.TagName, out var version)) continue;
+            result.Add(new ReleaseInfo(version, r.TagName ?? "", r.Name ?? r.TagName ?? "", r.Body ?? "",
                 (r.Assets ?? []).Select(a => new ReleaseAsset(a.Id, a.Name ?? "", a.Size, a.Url ?? "")).ToList()));
         }
         return result;
@@ -115,9 +108,6 @@ public sealed class GitHubReleaseSource
             EnsureTrustedHost(uri);
             using var request = new HttpRequestMessage(HttpMethod.Get, uri);
             request.Headers.Accept.ParseAdd(accept);
-            // The token is attached only for the GitHub API host, never for redirect targets (asset CDN).
-            if (uri.Host.Equals(ApiHost, StringComparison.OrdinalIgnoreCase) && ReadToken() is { } token)
-                request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
             HttpResponseMessage response;
             try
@@ -142,19 +132,6 @@ public sealed class GitHubReleaseSource
             return response;
         }
         throw new UpdateException("Too many redirects while contacting GitHub.");
-    }
-
-    private string? ReadToken()
-    {
-        try
-        {
-            var token = _secrets?.Read(TokenKey);
-            return string.IsNullOrWhiteSpace(token) ? null : token.Trim();
-        }
-        catch (System.ComponentModel.Win32Exception)
-        {
-            return null;
-        }
     }
 
     /// <summary>Only HTTPS GitHub hosts are contacted, even if a response redirects elsewhere.</summary>

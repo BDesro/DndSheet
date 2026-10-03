@@ -30,11 +30,11 @@ public sealed record SyncResult(
 /// <summary>
 /// One sync pass: push local deletes and edits, then pull remote changes. Local SQLite stays the source of
 /// truth. On a conflict the cloud version wins and the local one is kept as a conflict copy. Design:
-/// docs/superpowers/specs/2026-09-29-cloud-sync-design.md §5.
+/// docs/CLOUD_SYNC.md (How a sync pass works).
 /// </summary>
 public sealed class CloudSync(
     ICharacterRepository repository, ISyncLocalStore local, ICloudCharacterStore cloud, ICloudSession session,
-    CharacterMigrator migrator, ILogger<CloudSync> logger, TimeProvider? time = null)
+    ILogger<CloudSync> logger, TimeProvider? time = null)
 {
     public static readonly TimeSpan PullOverlap = TimeSpan.FromMinutes(2);
     /// <summary>Below the 90-day tombstone retention: a machine this stale may have missed purged deletes.</summary>
@@ -206,7 +206,7 @@ public sealed class CloudSync(
         }
         if (!TryRead(remote, pass, out var remoteCharacter)) return;
 
-        var mine = CharacterJson.Deserialize(change.Data, change.SchemaVersion, migrator);
+        var mine = CharacterJson.Deserialize(change.Data, change.SchemaVersion);
         mine.Id = change.Id;
         if (CharacterJson.Serialize(mine) == CharacterJson.Serialize(remoteCharacter))
         {
@@ -285,7 +285,7 @@ public sealed class CloudSync(
         {
             if (Encoding.UTF8.GetByteCount(row.Data!) > PortableCharacterFile.MaxFileBytes)
                 throw new CharacterFormatException("The character is too large.");
-            var parsed = CharacterJson.Deserialize(row.Data!, row.SchemaVersion, migrator);
+            var parsed = CharacterJson.Deserialize(row.Data!, row.SchemaVersion);
             PortableCharacterFile.EnforceLimits(parsed);
             parsed.Id = row.Id;
             character = parsed;
@@ -300,7 +300,7 @@ public sealed class CloudSync(
 
     private Character ConflictCopy(Character source)
     {
-        var copy = CharacterJson.Clone(source, migrator);
+        var copy = CharacterJson.Clone(source);
         copy.Id = Guid.NewGuid();
         var date = _time.GetLocalNow().ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
         copy.Identity.Name = $"{source.Identity.Name} (conflict copy, {date})";

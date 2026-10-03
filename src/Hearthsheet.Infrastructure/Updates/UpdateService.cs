@@ -1,16 +1,17 @@
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.IO.Compression;
 using System.Security.Cryptography;
 using Microsoft.Extensions.Logging;
 
 namespace Hearthsheet.Infrastructure.Updates;
 
-public sealed record UpdateCheckResult(SemVersion Current, ReleaseInfo? Latest)
+public sealed record UpdateCheckResult(Version Current, ReleaseInfo? Latest)
 {
     public bool IsUpdateAvailable => Latest is not null && Latest.Version > Current;
 }
 
-public sealed record StagedUpdate(SemVersion Version, string Directory);
+public sealed record StagedUpdate(Version Version, string Directory);
 
 /// <summary>
 /// Check → download → verify → stage → hand off to Hearthsheet.Updater (which replaces the install
@@ -18,7 +19,7 @@ public sealed record StagedUpdate(SemVersion Version, string Directory);
 /// Release contract: each release tag vX.Y.Z carries Hearthsheet-X.Y.Z-win-x64.zip and SHA256SUMS.txt.
 /// </summary>
 public sealed class UpdateService(
-    GitHubReleaseSource source, UpdateOptions options, SemVersion currentVersion, string updatesRoot, ILogger<UpdateService> logger)
+    GitHubReleaseSource source, UpdateOptions options, Version currentVersion, string updatesRoot, ILogger<UpdateService> logger)
 {
     public const string AppExecutable = "Hearthsheet.exe";
     public const string UpdaterExecutable = "Hearthsheet.Updater.exe";
@@ -26,20 +27,27 @@ public sealed class UpdateService(
     private const long MaxPackageBytes = 500L * 1024 * 1024;
     private const long MaxChecksumBytes = 64 * 1024;
 
-    public SemVersion CurrentVersion => currentVersion;
+    public Version CurrentVersion => currentVersion;
 
     public async Task<UpdateCheckResult> CheckAsync(CancellationToken ct = default)
     {
         logger.LogInformation("Checking for updates ({Owner}/{Repo}, current {Version})", options.Owner, options.Repository, currentVersion);
         var releases = await source.GetReleasesAsync(ct);
         var latest = releases
-            .Where(r => options.AllowPreRelease || !r.PreRelease)
             .Where(r => FindPackage(r) is not null)
             .MaxBy(r => r.Version);
         var result = new UpdateCheckResult(currentVersion, latest);
         logger.LogInformation("Update check complete: latest {Latest}, update available: {Available}",
             latest?.Version.ToString() ?? "none", result.IsUpdateAvailable);
         return result;
+    }
+
+    /// <summary>Strict X.Y.Z (optional leading "v" and "+build" suffix). Pre-release tags such as "1.3.0-beta" don't parse, so they are never offered.</summary>
+    public static bool TryParseVersion(string? text, [NotNullWhen(true)] out Version? version)
+    {
+        version = null;
+        var core = text?.Trim().TrimStart('v', 'V').Split('+')[0];
+        return core?.Count(c => c == '.') == 2 && Version.TryParse(core, out version);
     }
 
     public static ReleaseAsset? FindPackage(ReleaseInfo release) =>
@@ -114,7 +122,7 @@ public sealed class UpdateService(
     }
 
     /// <summary>The staged folder must contain the app and updater, and actually be the advertised version.</summary>
-    public static void VerifyStagedPackage(string stageDir, SemVersion expected)
+    public static void VerifyStagedPackage(string stageDir, Version expected)
     {
         foreach (var required in new[] { AppExecutable, UpdaterExecutable, "Hearthsheet.dll" })
         {
@@ -122,7 +130,7 @@ public sealed class UpdateService(
                 throw new UpdateException($"The update package is incomplete (missing {required}).");
         }
         var productVersion = FileVersionInfo.GetVersionInfo(Path.Combine(stageDir, "Hearthsheet.dll")).ProductVersion;
-        if (!SemVersion.TryParse(productVersion, out var actual) || actual != expected)
+        if (!TryParseVersion(productVersion, out var actual) || actual != expected)
             throw new UpdateException($"The update package reports version {productVersion}, expected {expected}.");
     }
 

@@ -41,13 +41,13 @@ public static class Samples
 
 public class SerializationTests
 {
-    private readonly PortableCharacterFile _portable = new(CharacterMigrator.Default);
+    private readonly PortableCharacterFile _portable = new();
 
     [Fact]
     public void RoundTrip_PreservesState()
     {
         var original = Samples.Rich();
-        var copy = CharacterJson.Deserialize(CharacterJson.Serialize(original), CharacterJson.CurrentSchemaVersion, CharacterMigrator.Default);
+        var copy = CharacterJson.Deserialize(CharacterJson.Serialize(original), CharacterJson.CurrentSchemaVersion);
         Assert.Equal(CharacterJson.Serialize(original), CharacterJson.Serialize(copy));
         Assert.Equal(original.Id, copy.Id);
     }
@@ -107,49 +107,13 @@ public class SerializationTests
         Assert.Equal(6, c.SavingThrows.Count);
         Assert.Equal(9, c.Spellcasting.Slots.Count);
     }
-
-    [Fact]
-    public void Migrator_AppliesStepsInOrder()
-    {
-        var migrator = new CharacterMigrator([new RenameNameMigration(), new AddInspirationMigration()], currentVersion: 3);
-        var node = new JsonObject { ["identity"] = new JsonObject { ["characterName"] = "Old" } };
-
-        Assert.True(migrator.Migrate(node, 1));
-        var c = CharacterJson.Deserialize(node, 3, new CharacterMigrator([], 3));
-        Assert.Equal("Old", c.Identity.Name);
-        Assert.True(c.Identity.Inspiration);
-    }
-
-    [Fact]
-    public void Migrator_FailsOnMissingStep()
-    {
-        var migrator = new CharacterMigrator([new AddInspirationMigration()], currentVersion: 3);
-        Assert.Throws<CharacterFormatException>(() => migrator.Migrate(new JsonObject(), 1));
-    }
-
-    private sealed class RenameNameMigration : ICharacterMigration
-    {
-        public int FromVersion => 1;
-        public void Apply(JsonObject character)
-        {
-            var identity = character["identity"]!.AsObject();
-            identity["name"] = identity["characterName"]!.DeepClone();
-            identity.Remove("characterName");
-        }
-    }
-
-    private sealed class AddInspirationMigration : ICharacterMigration
-    {
-        public int FromVersion => 2;
-        public void Apply(JsonObject character) => character["identity"]!.AsObject()["inspiration"] = true;
-    }
 }
 
 public class RepositoryTests : IDisposable
 {
     private readonly TempDir _dir = new();
-    private SqliteCharacterRepository NewRepository(CharacterMigrator? migrator = null) =>
-        new(_dir.File("characters.db"), migrator ?? CharacterMigrator.Default, NullLogger<SqliteCharacterRepository>.Instance);
+    private SqliteCharacterRepository NewRepository() =>
+        new(_dir.File("characters.db"), NullLogger<SqliteCharacterRepository>.Instance);
 
     public void Dispose() => _dir.Dispose();
 
@@ -200,17 +164,14 @@ public class RepositoryTests : IDisposable
     }
 
     [Fact]
-    public void Load_MigratesOlderStoredRows()
+    public void Load_RowFromNewerSchema_ThrowsFormatException()
     {
         var repo = NewRepository();
         var c = new Character();
-        c.Identity.Name = "Legacy";
         repo.Save(c);
-        ExecuteSql("UPDATE characters SET schema_version = 1");
+        ExecuteSql($"UPDATE characters SET schema_version = {CharacterJson.CurrentSchemaVersion + 1}");
 
-        var migrating = NewRepository(new CharacterMigrator([new MarkMigration()], currentVersion: 2));
-        var loaded = migrating.Load(c.Id)!;
-        Assert.Equal("Legacy (migrated)", loaded.Identity.Name);
+        Assert.Throws<CharacterFormatException>(() => repo.Load(c.Id));
     }
 
     [Fact]
@@ -237,7 +198,7 @@ public class RepositoryTests : IDisposable
         var backupPath = _dir.File("backup.db");
         repo.BackupTo(backupPath);
 
-        var restored = new SqliteCharacterRepository(backupPath, CharacterMigrator.Default, NullLogger<SqliteCharacterRepository>.Instance);
+        var restored = new SqliteCharacterRepository(backupPath, NullLogger<SqliteCharacterRepository>.Instance);
         Assert.Equal("Arannis", restored.Load(c.Id)!.Identity.Name);
     }
 
@@ -245,21 +206,21 @@ public class RepositoryTests : IDisposable
     public void Library_DuplicateCreatesIndependentCopy()
     {
         var repo = NewRepository();
-        var library = new CharacterLibrary(repo, new PortableCharacterFile(CharacterMigrator.Default), CharacterMigrator.Default,
+        var library = new CharacterLibrary(repo, new PortableCharacterFile(),
             "1.0.0", NullLogger<CharacterLibrary>.Instance);
         var original = library.Create(new NewCharacterOptions("Hero", "Fighter", 3, "Human", "Soldier"));
         var copy = library.Duplicate(original);
 
         copy.Abilities.Strength = 20;
-        library.Save(copy);
-        Assert.Equal(2, library.List().Count);
-        Assert.Equal(10, library.Load(original.Id)!.Abilities.Strength);
-        Assert.Equal("Hero (copy)", library.Load(copy.Id)!.Identity.Name);
+        repo.Save(copy);
+        Assert.Equal(2, repo.List().Count);
+        Assert.Equal(10, repo.Load(original.Id)!.Abilities.Strength);
+        Assert.Equal("Hero (copy)", repo.Load(copy.Id)!.Identity.Name);
 
         var exportPath = _dir.File("hero.dndchar");
         library.Export(original, exportPath);
         var imported = library.Import(exportPath);
-        Assert.Equal(3, library.List().Count);
+        Assert.Equal(3, repo.List().Count);
         Assert.Equal("Hero", imported.Identity.Name);
     }
 
@@ -270,16 +231,6 @@ public class RepositoryTests : IDisposable
         using var command = connection.CreateCommand();
         command.CommandText = sql;
         command.ExecuteNonQuery();
-    }
-
-    private sealed class MarkMigration : ICharacterMigration
-    {
-        public int FromVersion => 1;
-        public void Apply(JsonObject character)
-        {
-            var identity = character["identity"]!.AsObject();
-            identity["name"] = identity["name"]!.GetValue<string>() + " (migrated)";
-        }
     }
 }
 

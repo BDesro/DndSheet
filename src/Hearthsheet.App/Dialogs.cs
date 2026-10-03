@@ -4,9 +4,7 @@ using Hearthsheet.App.Views;
 using Hearthsheet.Core.Content;
 using Hearthsheet.Core.Domain;
 using Hearthsheet.Core.Serialization;
-using Hearthsheet.Infrastructure.Security;
 using Hearthsheet.Infrastructure.Sync;
-using Hearthsheet.Infrastructure.Updates;
 using Microsoft.Win32;
 
 namespace Hearthsheet.App;
@@ -48,9 +46,6 @@ public sealed class Dialogs
 
     public void ShowUpdates(UpdateViewModel vm) =>
         new UpdateDialog { Owner = Owner, DataContext = vm }.ShowDialog();
-
-    public void ManageGitHubToken(ISecretStore store) =>
-        new GitHubTokenDialog(store, GitHubReleaseSource.TokenKey) { Owner = Owner }.ShowDialog();
 
     /// <returns>True when the user signed in (or created an account, or reset their password).</returns>
     public bool SignIn(SupabaseAuth auth) =>

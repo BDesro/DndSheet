@@ -36,5 +36,4 @@ jobs:
         run: |
           $tag = '${{ github.ref_name }}'
           $args = @($tag, (Get-Item artifacts/*.zip).FullName, 'artifacts/SHA256SUMS.txt', '--title', "Hearthsheet $tag", '--notes-file', 'RELEASE_NOTES.md')
-          if ($tag -match '-') { $args += '--prerelease' }
           gh release create @args

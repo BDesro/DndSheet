@@ -1,18 +1,16 @@
 <#
 .SYNOPSIS
   Installs Hearthsheet for the current user from an extracted release folder.
-  Checks for the .NET 10 Desktop Runtime first and offers to install it if it's missing.
+  Checks for the .NET 10 Desktop Runtime first and points to its download page if it's missing.
   No administrator rights are needed for Hearthsheet itself.
 .PARAMETER InstallDir      Target folder (default %LOCALAPPDATA%\Programs\Hearthsheet).
 .PARAMETER NoDesktopShortcut  Only create the Start Menu shortcut.
 .PARAMETER NoLaunch        Don't offer to start the app afterwards.
-.PARAMETER AssumeRuntimeMissing  Testing aid: behave as if the runtime check failed.
 #>
 param(
     [string]$InstallDir = (Join-Path $env:LOCALAPPDATA 'Programs\Hearthsheet'),
     [switch]$NoDesktopShortcut,
-    [switch]$NoLaunch,
-    [switch]$AssumeRuntimeMissing
+    [switch]$NoLaunch
 )
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'Dependencies.ps1')
@@ -26,8 +24,7 @@ if (-not (Test-Path (Join-Path $source 'Hearthsheet.exe'))) {
 }
 
 $runtimeOk = Confirm-Dependency -Name '.NET 10 Desktop Runtime (x64)' `
-    -Test { -not $AssumeRuntimeMissing -and (Test-DotnetComponent 'Microsoft.WindowsDesktop.App' 10) } `
-    -WingetId 'Microsoft.DotNet.DesktopRuntime.10' `
+    -Test { Test-DotnetComponent 'Microsoft.WindowsDesktop.App' 10 } `
     -DownloadUrl 'https://dotnet.microsoft.com/download/dotnet/10.0'
 if (-not $runtimeOk) {
     Write-Host 'Installation cancelled: a required component is missing. Nothing was changed.'

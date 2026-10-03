@@ -14,8 +14,6 @@ public sealed class SupabaseOptions
     public string Url { get; set; } = "";
     /// <summary>The anon or publishable key. Public by design: row-level security is the gatekeeper.</summary>
     public string AnonKey { get; set; } = "";
-    /// <summary>Minutes between background syncs.</summary>
-    public double IntervalMinutes { get; set; } = 5;
 
     /// <summary>True when the URL is an absolute https URL and a key is set.</summary>
     public bool IsConfigured =>

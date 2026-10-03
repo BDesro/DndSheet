@@ -13,37 +13,9 @@ function Test-DotnetComponent {
 }
 
 function Confirm-Dependency {
-    <#
-    Checks a prerequisite; if it's missing, asks the user whether to install it (winget, or the download page),
-    then re-checks. Returns $true only when the prerequisite is present afterwards.
-    The user sees and accepts winget's own license prompts; nothing is accepted on their behalf.
-    #>
-    param(
-        [string]$Name,
-        [scriptblock]$Test,
-        [string]$WingetId,
-        [string]$DownloadUrl
-    )
+    <# Checks a prerequisite. If it's missing, says where to get it and returns $false; nothing is installed on the user's behalf. #>
+    param([string]$Name, [scriptblock]$Test, [string]$DownloadUrl)
     if (& $Test) { Write-Host "[ok] $Name found."; return $true }
-
-    Write-Host ""
-    Write-Warning "$Name is required but was not found."
-    $answer = Read-Host "Install $Name now? [Y/n]"
-    if ($answer -and $answer -notmatch '^(y|yes)$') {
-        Write-Host "Not installed. Install it from $DownloadUrl and run the installer again."
-        return $false
-    }
-
-    if (Get-Command winget -ErrorAction SilentlyContinue) {
-        Write-Host "Installing $Name with winget (you may be asked to accept its license)..."
-        winget install --id $WingetId --exact --source winget
-    } else {
-        Write-Host "winget isn't available, so the download page will open. Finish that installer, then press Enter here."
-        Start-Process $DownloadUrl
-        Read-Host 'Press Enter once the installation has finished' | Out-Null
-    }
-
-    if (& $Test) { Write-Host "[ok] $Name installed."; return $true }
-    Write-Warning "$Name still wasn't found. If the installer asked for a restart, restart and run this installer again."
+    Write-Warning "$Name is required but was not found. Install it from $DownloadUrl and run the installer again."
     return $false
 }

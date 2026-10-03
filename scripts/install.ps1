@@ -1,7 +1,7 @@
 <#
 .SYNOPSIS
   Builds Hearthsheet from source and installs it for the current user (Start Menu + desktop shortcuts).
-  Checks for the .NET 10 SDK (needed to build) first and offers to install it; the packaged installer
+  Checks for the .NET 10 SDK (needed to build) first and points to its download page if it is missing; the packaged installer
   then checks for the .NET 10 Desktop Runtime (needed to run).
 .EXAMPLE
   powershell -ExecutionPolicy Bypass -File scripts/install.ps1
@@ -18,7 +18,6 @@ $root = Split-Path $PSScriptRoot -Parent
 
 $sdkOk = Confirm-Dependency -Name '.NET 10 SDK' `
     -Test { Test-DotnetComponent 'sdk' 10 } `
-    -WingetId 'Microsoft.DotNet.SDK.10' `
     -DownloadUrl 'https://dotnet.microsoft.com/download/dotnet/10.0'
 if (-not $sdkOk) { Write-Host 'Build cancelled: the .NET 10 SDK is required.'; exit 1 }
 
