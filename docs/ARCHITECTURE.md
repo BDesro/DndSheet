@@ -155,7 +155,7 @@ Import treats the file as untrusted:
 ## 9. Updates
 
 ```text
-dev → main pull request merged → Release workflow (reads <Version>; if tag vX.Y.Z is new: tests, scripts/publish.ps1, gh release create with GITHUB_TOKEN, which creates the tag)
+dev → main pull request merged → Release workflow (reads <Version>; if X.Y.Z is newer than the latest release tag: tests, scripts/publish.ps1, gh release create with GITHUB_TOKEN, which creates the tag)
    → GitHub Release: Hearthsheet-X.Y.Z-win-x64.zip + SHA256SUMS.txt
    → App: UpdateService.CheckAsync   (GET api.github.com/repos/{owner}/{repo}/releases; newest stable release with an X.Y.Z tag)
    → user confirms; character saved
