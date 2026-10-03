@@ -63,7 +63,6 @@
             </MenuItem>
             <MenuItem Header="_Help">
                 <MenuItem Header="Check for _updates…" Command="{Binding Update.ShowDialog}" />
-                <MenuItem Header="GitHub _token (private releases)…" Command="{Binding ManageToken}" />
                 <Separator />
                 <MenuItem Header="Open _log folder" Command="{Binding OpenLogs}" />
                 <MenuItem Header="Open _data folder" Command="{Binding OpenDataFolder}" />
@@ -77,8 +76,6 @@
                 <TextBlock DockPanel.Dock="Right" Foreground="{StaticResource InkMuted}" VerticalAlignment="Center">
                     <Run Text="Hearthsheet" /> <Run Text="{Binding AppVersion, Mode=OneWay}" />
                 </TextBlock>
-                <TextBlock DockPanel.Dock="Right" Text="Development mode · " Foreground="{StaticResource Accent}" VerticalAlignment="Center"
-                           Visibility="{Binding IsDevelopmentMode, Converter={StaticResource VisibleWhen}}" />
                 <Button DockPanel.Dock="Right" Margin="0,0,14,0" Padding="10,1" MinHeight="22" Command="{Binding Update.ShowDialog}"
                         Visibility="{Binding Update.IsUpdateAvailable, Converter={StaticResource VisibleWhen}}"
                         Content="{Binding Update.Available.Version}" ContentStringFormat="Update {0} available" />

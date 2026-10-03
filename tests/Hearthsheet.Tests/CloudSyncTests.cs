@@ -86,7 +86,7 @@ internal sealed class FakeCloud(ManualTime time) : ICloudCharacterStore
     public void EditRemotely(Guid id, Action<Character> edit)
     {
         var row = Rows[id];
-        var c = CharacterJson.Deserialize(row.Data!, row.SchemaVersion, CharacterMigrator.Default);
+        var c = CharacterJson.Deserialize(row.Data!, row.SchemaVersion);
         edit(c);
         Rows[id] = row with { Name = c.Identity.Name, Revision = row.Revision + 1, Data = CharacterJson.Serialize(c), UpdatedAt = Tick() };
     }
@@ -112,8 +112,8 @@ internal sealed class FakeSession : ICloudSession
 internal sealed class Machine(TempDir dir, string name, FakeCloud cloud, FakeSession session, ManualTime time)
 {
     public SqliteCharacterRepository Repo { get; } =
-        new(dir.File(name + ".db"), CharacterMigrator.Default, NullLogger<SqliteCharacterRepository>.Instance);
-    public CloudSync Sync => field ??= new CloudSync(Repo, Repo, cloud, session, CharacterMigrator.Default, NullLogger<CloudSync>.Instance, time);
+        new(dir.File(name + ".db"), NullLogger<SqliteCharacterRepository>.Instance);
+    public CloudSync Sync => field ??= new CloudSync(Repo, Repo, cloud, session, NullLogger<CloudSync>.Instance, time);
     public Guid? OpenId { get; set; }
 
     public Task<SyncResult> SyncAsync() => Sync.RunAsync(() => OpenId, waitIfBusy: false, CancellationToken.None);

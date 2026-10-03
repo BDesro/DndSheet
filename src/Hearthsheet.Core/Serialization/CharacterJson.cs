@@ -12,7 +12,10 @@ namespace Hearthsheet.Core.Serialization;
 /// </summary>
 public static class CharacterJson
 {
-    /// <summary>Bump when the stored shape changes, and add an <see cref="ICharacterMigration"/> from the old version.</summary>
+    /// <summary>
+    /// Bump when the stored shape changes, and migrate the raw <see cref="JsonObject"/> from the old version in
+    /// <see cref="Deserialize(JsonObject, int)"/> before it is materialized. No migrations exist yet: version 1 is the first release.
+    /// </summary>
     public const int CurrentSchemaVersion = 1;
 
     public static readonly JsonSerializerOptions Options = new()
@@ -26,25 +29,26 @@ public static class CharacterJson
         IgnoreReadOnlyProperties = true,
     };
 
-    private static readonly JsonSerializerOptions IndentedOptions = new(Options) { WriteIndented = true };
-
     public static JsonObject ToJsonObject(Character c) =>
         JsonSerializer.SerializeToNode(c, Options)!.AsObject();
 
-    public static string Serialize(Character c, bool indented = false) =>
-        JsonSerializer.Serialize(c, indented ? IndentedOptions : Options);
+    public static string Serialize(Character c) => JsonSerializer.Serialize(c, Options);
 
-    /// <summary>Migrates <paramref name="node"/> from <paramref name="schemaVersion"/> to current, then materializes it.</summary>
-    public static Character Deserialize(JsonObject node, int schemaVersion, CharacterMigrator migrator)
+    /// <summary>Materializes <paramref name="node"/>, which was saved at <paramref name="schemaVersion"/>.</summary>
+    public static Character Deserialize(JsonObject node, int schemaVersion)
     {
-        migrator.Migrate(node, schemaVersion);
+        if (schemaVersion < 1)
+            throw new CharacterFormatException($"Invalid character schema version {schemaVersion}.");
+        if (schemaVersion > CurrentSchemaVersion)
+            throw new CharacterFormatException(
+                $"This character was saved by a newer version of the application (schema {schemaVersion}; this version supports up to {CurrentSchemaVersion}). Update the application to open it.");
         var character = node.Deserialize<Character>(Options)
                         ?? throw new CharacterFormatException("Character data is empty.");
         character.Normalize();
         return character;
     }
 
-    public static Character Deserialize(string json, int schemaVersion, CharacterMigrator migrator)
+    public static Character Deserialize(string json, int schemaVersion)
     {
         JsonNode? node;
         try
@@ -58,7 +62,7 @@ public static class CharacterJson
         if (node is not JsonObject obj) throw new CharacterFormatException("Character data must be a JSON object.");
         try
         {
-            return Deserialize(obj, schemaVersion, migrator);
+            return Deserialize(obj, schemaVersion);
         }
         catch (JsonException ex)
         {
@@ -66,8 +70,7 @@ public static class CharacterJson
         }
     }
 
-    public static Character Clone(Character c, CharacterMigrator migrator) =>
-        Deserialize(Serialize(c), CurrentSchemaVersion, migrator);
+    public static Character Clone(Character c) => Deserialize(Serialize(c), CurrentSchemaVersion);
 }
 
 public sealed class CharacterFormatException(string message, Exception? inner = null) : Exception(message, inner);

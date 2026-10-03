@@ -8,7 +8,7 @@ using Microsoft.Extensions.Logging;
 
 namespace Hearthsheet.App.ViewModels;
 
-public sealed record CloudServices(SupabaseAuth Auth, CloudSync Sync, SupabaseOptions Options);
+public sealed record CloudServices(SupabaseAuth Auth, CloudSync Sync);
 
 /// <summary>
 /// Account state, the status-bar line and when sync passes run: startup, sign-in, every few minutes, "Sync now"
@@ -30,8 +30,7 @@ public sealed class SyncViewModel : Observable
         _main = main;
         _dialogs = dialogs;
         _log = log;
-        var minutes = cloud?.Options.IntervalMinutes ?? 5;
-        _timer.Interval = TimeSpan.FromMinutes(Math.Clamp(double.IsFinite(minutes) ? minutes : 5, 1, 1440));
+        _timer.Interval = TimeSpan.FromMinutes(5);
         _timer.Tick += (_, _) => _ = RunAsync();
         SignIn = new RelayCommand(() => _ = SignInAsync(), () => IsConfigured && !IsSignedIn);
         SignOut = new RelayCommand(() => _ = SignOutAsync(), () => IsSignedIn);

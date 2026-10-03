@@ -1,7 +1,7 @@
 name: CI
 on:
   push:
-    branches: [main]
+    branches: [main, dev]
   pull_request:
 
 permissions:
@@ -12,6 +12,10 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v7
+      - name: A pull request into main must be newer than the latest release
+        if: github.base_ref == 'main'
+        shell: pwsh
+        run: ./scripts/check-version.ps1
       - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: 10.0.x

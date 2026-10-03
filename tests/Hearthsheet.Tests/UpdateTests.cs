@@ -16,20 +16,17 @@ public class SemVersionTests
     [InlineData("1.0.0", "1.0.1")]
     [InlineData("1.9.0", "1.10.0")]
     [InlineData("v1.2.3", "2.0.0")]
-    [InlineData("1.0.0-alpha", "1.0.0")]
-    [InlineData("1.0.0-alpha", "1.0.0-alpha.1")]
-    [InlineData("1.0.0-alpha.2", "1.0.0-alpha.10")]
-    [InlineData("1.0.0-alpha.9", "1.0.0-beta")]
-    [InlineData("1.0.0-9", "1.0.0-a")]
     public void Ordering(string lower, string higher)
     {
-        Assert.True(SemVersion.Parse(lower) < SemVersion.Parse(higher));
-        Assert.True(SemVersion.Parse(higher) > SemVersion.Parse(lower));
+        Assert.True(Parse(lower) < Parse(higher));
+        Assert.True(Parse(higher) > Parse(lower));
     }
 
     [Fact]
-    public void BuildMetadataIsIgnored() =>
-        Assert.Equal(SemVersion.Parse("1.2.3"), SemVersion.Parse("V1.2.3+abc"));
+    public void LeadingVAndBuildMetadataAreIgnored() => Assert.Equal(Parse("1.2.3"), Parse("V1.2.3+abc"));
+
+    private static Version Parse(string text) =>
+        UpdateService.TryParseVersion(text, out var v) ? v : throw new FormatException(text);
 
     [Theory]
     [InlineData("")]
@@ -37,8 +34,10 @@ public class SemVersionTests
     [InlineData("1.2.3.4")]
     [InlineData("1.-2.3")]
     [InlineData("1.2.3-")]
+    [InlineData("1.2.3-beta")]
+    [InlineData("1.2")]
     [InlineData("1..3")]
-    public void RejectsInvalid(string text) => Assert.False(SemVersion.TryParse(text, out _));
+    public void RejectsInvalid(string text) => Assert.False(UpdateService.TryParseVersion(text, out _));
 }
 
 public class UpdateServiceTests : IDisposable
@@ -58,10 +57,10 @@ public class UpdateServiceTests : IDisposable
                {"id":{{i * 10 + 2}},"name":"SHA256SUMS.txt","size":100,"url":"https://api.github.com/repos/owner/repo/releases/assets/{{i * 10 + 2}}"}]}
             """)) + "]";
 
-    private UpdateService Service(StubHandler handler, string current = "1.0.0", UpdateOptions? options = null, ISecretStore? secrets = null)
+    private UpdateService Service(StubHandler handler, string current = "1.0.0", UpdateOptions? options = null)
     {
-        var source = new GitHubReleaseSource(options ?? Options, secrets, handler);
-        return new UpdateService(source, options ?? Options, SemVersion.Parse(current), _dir.Path, NullLogger<UpdateService>.Instance);
+        var source = new GitHubReleaseSource(options ?? Options, handler);
+        return new UpdateService(source, options ?? Options, Version.Parse(current), _dir.Path, NullLogger<UpdateService>.Instance);
     }
 
     [Fact]
@@ -71,15 +70,6 @@ public class UpdateServiceTests : IDisposable
         var result = await Service(handler).CheckAsync();
         Assert.True(result.IsUpdateAvailable);
         Assert.Equal("1.1.0", result.Latest!.Version.ToString());
-    }
-
-    [Fact]
-    public async Task Check_AllowsPreReleaseWhenConfigured()
-    {
-        var handler = new StubHandler(_ => Json(ReleasesJson(("v1.1.0", false, false), ("v1.2.0-beta", true, false))));
-        var options = new UpdateOptions { Owner = Owner, Repository = Repo, AllowPreRelease = true };
-        var result = await Service(handler, options: options).CheckAsync();
-        Assert.Equal("1.2.0-beta", result.Latest!.Version.ToString());
     }
 
     [Fact]
@@ -105,9 +95,8 @@ public class UpdateServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task Token_IsSentToApiHost_ButNotToRedirectTarget()
+    public async Task Download_FollowsRedirectToTrustedHost()
     {
-        var secrets = new FakeSecrets { [GitHubReleaseSource.TokenKey] = "github_pat_secretsecretsecretsecret" };
         var zip = BuildPackage();
         var sums = $"{Sha(zip)}  Hearthsheet-{RepoVersion}-win-x64.zip\n";
         var handler = new StubHandler(req =>
@@ -125,14 +114,12 @@ public class UpdateServiceTests : IDisposable
             };
         });
 
-        var service = Service(handler, current: "0.0.1", secrets: secrets);
+        var service = Service(handler, current: "0.0.1");
         var release = (await service.CheckAsync()).Latest!;
         var staged = await service.DownloadAndStageAsync(release, null);
 
         Assert.True(File.Exists(Path.Combine(staged.Directory, "Hearthsheet.exe")));
-        Assert.Contains(handler.Requests, r => r.Host == "objects.githubusercontent.com");
-        Assert.All(handler.Requests.Where(r => r.Host == "api.github.com"), r => Assert.True(r.HadAuth));
-        Assert.All(handler.Requests.Where(r => r.Host != "api.github.com"), r => Assert.False(r.HadAuth));
+        Assert.Contains("objects.githubusercontent.com", handler.Requests);
     }
 
     [Fact]
@@ -322,11 +309,11 @@ internal sealed class FakeSecrets : Dictionary<string, string>, ISecretStore
 
 internal sealed class StubHandler(Func<HttpRequestMessage, HttpResponseMessage> respond) : HttpMessageHandler
 {
-    public List<(string Host, bool HadAuth)> Requests { get; } = [];
+    public List<string> Requests { get; } = [];
 
     protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
-        Requests.Add((request.RequestUri!.Host, request.Headers.Authorization is not null));
+        Requests.Add(request.RequestUri!.Host);
         return Task.FromResult(respond(request));
     }
 }

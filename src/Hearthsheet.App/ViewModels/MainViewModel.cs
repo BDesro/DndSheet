@@ -10,7 +10,6 @@ using Hearthsheet.Core.Rules;
 using Hearthsheet.Core.Serialization;
 using Hearthsheet.Core.Sync;
 using Hearthsheet.Infrastructure;
-using Hearthsheet.Infrastructure.Security;
 using Hearthsheet.Infrastructure.Updates;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging;
@@ -18,8 +17,8 @@ using Microsoft.Extensions.Logging;
 namespace Hearthsheet.App.ViewModels;
 
 public sealed record MainServices(
-    CharacterLibrary Library, RestService Rest, UpdateService Updates, AppSettings Settings, AppPaths Paths,
-    ISecretStore Secrets, Dialogs Dialogs, ILoggerFactory Loggers, CloudServices? Cloud);
+    ICharacterRepository Repository, CharacterLibrary Library, RestService Rest, UpdateService Updates, AppSettings Settings, AppPaths Paths,
+    Dialogs Dialogs, ILoggerFactory Loggers, CloudServices? Cloud);
 
 /// <summary>Shell: the character list, the open character, saving/autosave, import/export and updates.</summary>
 public sealed class MainViewModel : Observable
@@ -32,7 +31,7 @@ public sealed class MainViewModel : Observable
     {
         _s = services;
         _log = services.Loggers.CreateLogger<MainViewModel>();
-        _autosave = new DispatcherTimer { Interval = TimeSpan.FromSeconds(Math.Max(0.5, services.Settings.Application.AutosaveDelaySeconds)) };
+        _autosave = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
         _autosave.Tick += (_, _) => Save();
         Update = new UpdateViewModel(services.Updates, services.Paths, services.Dialogs, services.Settings.Updates, _log, BeforeUpdateShutdown);
         Sync = new SyncViewModel(services.Cloud, this, services.Dialogs, services.Loggers.CreateLogger<SyncViewModel>());
@@ -49,7 +48,6 @@ public sealed class MainViewModel : Observable
         ZoomReset = new RelayCommand(() => Zoom = 1.0);
         OpenLogs = new RelayCommand(() => Process.Start(new ProcessStartInfo(_s.Paths.Logs) { UseShellExecute = true }));
         OpenDataFolder = new RelayCommand(() => Process.Start(new ProcessStartInfo(_s.Paths.Root) { UseShellExecute = true }));
-        ManageToken = new RelayCommand(() => _s.Dialogs.ManageGitHubToken(_s.Secrets));
     }
 
     public ObservableCollection<CharacterSummary> Characters { get; } = [];
@@ -60,7 +58,6 @@ public sealed class MainViewModel : Observable
     private volatile Character? _openCharacter;
     public Guid? OpenCharacterId => _openCharacter?.Id;
     public string AppVersion => AppSettings.AppVersion;
-    public bool IsDevelopmentMode => _s.Settings.Application.DevelopmentMode;
 
     public CharacterSummary? SelectedSummary
     {
@@ -108,7 +105,6 @@ public sealed class MainViewModel : Observable
     public ICommand ZoomReset { get; }
     public ICommand OpenLogs { get; }
     public ICommand OpenDataFolder { get; }
-    public ICommand ManageToken { get; }
 
     public void OnStarted()
     {
@@ -131,7 +127,7 @@ public sealed class MainViewModel : Observable
     {
         try
         {
-            var list = _s.Library.List();
+            var list = _s.Repository.List();
             Characters.Clear();
             foreach (var summary in list) Characters.Add(summary);
             // Re-point the selection at the refreshed summary; the character itself is already open.
@@ -149,7 +145,7 @@ public sealed class MainViewModel : Observable
         if (Current is not null && Current.Session.IsDirty && !Save()) return;
         try
         {
-            var character = _s.Library.Load(id);
+            var character = _s.Repository.Load(id);
             if (character is null)
             {
                 _s.Dialogs.Error("That character no longer exists.");
@@ -188,7 +184,7 @@ public sealed class MainViewModel : Observable
         if (Current is null) return true;
         try
         {
-            _s.Library.Save(Current.Character);
+            _s.Repository.Save(Current.Character);
             Current.Session.MarkSaved();
             SaveStatus = $"Saved {DateTime.Now:HH:mm:ss}";
             RefreshSummary(Current.Character);
@@ -263,7 +259,7 @@ public sealed class MainViewModel : Observable
     private void RefreshSummary(Character c)
     {
         var index = Characters.ToList().FindIndex(s => s.Id == c.Id);
-        var fresh = _s.Library.List().FirstOrDefault(s => s.Id == c.Id);
+        var fresh = _s.Repository.List().FirstOrDefault(s => s.Id == c.Id);
         if (index < 0 || fresh is null || fresh == Characters[index]) return;
         var wasSelected = SelectedSummary?.Id == c.Id;
         Characters[index] = fresh;
@@ -301,7 +297,7 @@ public sealed class MainViewModel : Observable
             _autosave.Stop();
             Current = null;
         }
-        _s.Library.Delete(target.Id);
+        _s.Repository.Delete(target.Id);
         SelectedSummary = null;
         ReloadList();
         SelectedSummary = Characters.FirstOrDefault();

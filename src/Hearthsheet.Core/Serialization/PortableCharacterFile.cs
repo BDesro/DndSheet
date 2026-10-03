@@ -9,7 +9,7 @@ namespace Hearthsheet.Core.Serialization;
 /// The self-contained, versioned export format (*.dndchar). Envelope:
 /// <c>{ "format": "dndsheet.character", "schemaVersion": 1, "appVersion": "1.0.0", "exportedUtc": "...", "character": { ... } }</c>
 /// </summary>
-public sealed class PortableCharacterFile(CharacterMigrator migrator)
+public sealed class PortableCharacterFile
 {
     public const string FormatId = "dndsheet.character";
     public const string FileExtension = ".dndchar";
@@ -72,13 +72,9 @@ public sealed class PortableCharacterFile(CharacterMigrator migrator)
         Character character;
         try
         {
-            character = CharacterJson.Deserialize(characterNode, version, migrator);
+            character = CharacterJson.Deserialize(characterNode, version);
         }
-        catch (JsonException ex)
-        {
-            throw new CharacterFormatException($"The character data is malformed: {ex.Message}", ex);
-        }
-        catch (InvalidOperationException ex)
+        catch (Exception ex) when (ex is JsonException or InvalidOperationException)
         {
             throw new CharacterFormatException($"The character data is malformed: {ex.Message}", ex);
         }

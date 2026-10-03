@@ -18,10 +18,9 @@ public sealed class SqliteCharacterRepository : ICharacterRepository, ISyncLocal
     private const int DatabaseVersion = 2;
 
     private readonly string _connectionString;
-    private readonly CharacterMigrator _migrator;
     private readonly ILogger _logger;
 
-    public SqliteCharacterRepository(string databasePath, CharacterMigrator migrator, ILogger<SqliteCharacterRepository> logger)
+    public SqliteCharacterRepository(string databasePath, ILogger<SqliteCharacterRepository> logger)
     {
         _connectionString = new SqliteConnectionStringBuilder
         {
@@ -30,7 +29,6 @@ public sealed class SqliteCharacterRepository : ICharacterRepository, ISyncLocal
             // Pooling keeps file handles open after Dispose, which blocks backups/deletes of the file.
             Pooling = false,
         }.ToString();
-        _migrator = migrator;
         _logger = logger;
         Initialize();
     }
@@ -100,21 +98,24 @@ public sealed class SqliteCharacterRepository : ICharacterRepository, ISyncLocal
         _logger.LogInformation("Database upgraded to version 2 (cloud sync)");
     }
 
-    public IReadOnlyList<CharacterSummary> List()
+    private List<T> Query<T>(string sql, Func<SqliteDataReader, T> map, params (string Name, object? Value)[] parameters)
     {
         using var connection = Open();
         using var command = connection.CreateCommand();
-        command.CommandText = "SELECT id, name, description, updated_utc FROM characters ORDER BY name COLLATE NOCASE";
+        command.CommandText = sql;
+        foreach (var (name, value) in parameters) command.Parameters.AddWithValue(name, value ?? DBNull.Value);
         using var reader = command.ExecuteReader();
-        var result = new List<CharacterSummary>();
-        while (reader.Read())
-        {
-            result.Add(new CharacterSummary(
-                Guid.Parse(reader.GetString(0)), reader.GetString(1), reader.GetString(2),
-                DateTime.Parse(reader.GetString(3), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind)));
-        }
+        var result = new List<T>();
+        while (reader.Read()) result.Add(map(reader));
         return result;
     }
+
+    private static long? NullableLong(SqliteDataReader r, int i) => r.IsDBNull(i) ? null : r.GetInt64(i);
+
+    public IReadOnlyList<CharacterSummary> List() =>
+        Query("SELECT id, name, description, updated_utc FROM characters ORDER BY name COLLATE NOCASE", r => new CharacterSummary(
+            Guid.Parse(r.GetString(0)), r.GetString(1), r.GetString(2),
+            DateTime.Parse(r.GetString(3), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind)));
 
     public Character? Load(Guid id)
     {
@@ -125,11 +126,8 @@ public sealed class SqliteCharacterRepository : ICharacterRepository, ISyncLocal
         using var reader = command.ExecuteReader();
         if (!reader.Read()) return null;
 
-        var schemaVersion = reader.GetInt32(0);
-        var character = CharacterJson.Deserialize(reader.GetString(1), schemaVersion, _migrator);
+        var character = CharacterJson.Deserialize(reader.GetString(1), reader.GetInt32(0));
         character.Id = id;
-        if (schemaVersion != _migrator.CurrentVersion)
-            _logger.LogInformation("Character {Id} migrated from schema {From} to {To} (saved on next write)", id, schemaVersion, _migrator.CurrentVersion);
         return character;
     }
 
@@ -191,31 +189,14 @@ public sealed class SqliteCharacterRepository : ICharacterRepository, ISyncLocal
         return command.ExecuteNonQuery();
     }
 
-    public IReadOnlyList<LocalChange> GetDirty()
-    {
-        using var connection = Open();
-        using var command = connection.CreateCommand();
-        command.CommandText = "SELECT id, local_revision, cloud_revision, name, description, schema_version, data FROM characters WHERE dirty = 1";
-        using var reader = command.ExecuteReader();
-        var result = new List<LocalChange>();
-        while (reader.Read())
-        {
-            result.Add(new LocalChange(
-                Guid.Parse(reader.GetString(0)), reader.GetInt64(1), reader.IsDBNull(2) ? null : reader.GetInt64(2),
-                reader.GetString(3), reader.GetString(4), reader.GetInt32(5), reader.GetString(6)));
-        }
-        return result;
-    }
+    public IReadOnlyList<LocalChange> GetDirty() =>
+        Query("SELECT id, local_revision, cloud_revision, name, description, schema_version, data FROM characters WHERE dirty = 1",
+            r => new LocalChange(Guid.Parse(r.GetString(0)), r.GetInt64(1), NullableLong(r, 2),
+                r.GetString(3), r.GetString(4), r.GetInt32(5), r.GetString(6)));
 
-    public LocalState? GetState(Guid id)
-    {
-        using var connection = Open();
-        using var command = connection.CreateCommand();
-        command.CommandText = "SELECT dirty, local_revision FROM characters WHERE id = $id";
-        command.Parameters.AddWithValue("$id", id.ToString());
-        using var reader = command.ExecuteReader();
-        return reader.Read() ? new LocalState(reader.GetInt64(0) != 0, reader.GetInt64(1)) : null;
-    }
+    public LocalState? GetState(Guid id) =>
+        Query("SELECT dirty, local_revision FROM characters WHERE id = $id",
+            r => new LocalState(r.GetInt64(0) != 0, r.GetInt64(1)), ("$id", id.ToString())).FirstOrDefault();
 
     public void MarkPushed(Guid id, long localRevision, long cloudRevision) =>
         Execute("""
@@ -249,27 +230,12 @@ public sealed class SqliteCharacterRepository : ICharacterRepository, ISyncLocal
         Execute("UPDATE characters SET cloud_revision = $cloud, dirty = 1 WHERE id = $id",
             ("$id", id.ToString()), ("$cloud", cloudRevision));
 
-    public IReadOnlyDictionary<Guid, long?> GetCloudRevisions()
-    {
-        using var connection = Open();
-        using var command = connection.CreateCommand();
-        command.CommandText = "SELECT id, cloud_revision FROM characters";
-        using var reader = command.ExecuteReader();
-        var result = new Dictionary<Guid, long?>();
-        while (reader.Read()) result[Guid.Parse(reader.GetString(0))] = reader.IsDBNull(1) ? null : reader.GetInt64(1);
-        return result;
-    }
+    public IReadOnlyDictionary<Guid, long?> GetCloudRevisions() =>
+        Query("SELECT id, cloud_revision FROM characters", r => (Id: Guid.Parse(r.GetString(0)), Revision: NullableLong(r, 1)))
+            .ToDictionary(x => x.Id, x => x.Revision);
 
-    public IReadOnlyList<PendingDelete> GetPendingDeletes()
-    {
-        using var connection = Open();
-        using var command = connection.CreateCommand();
-        command.CommandText = "SELECT id, cloud_revision FROM pending_deletes";
-        using var reader = command.ExecuteReader();
-        var result = new List<PendingDelete>();
-        while (reader.Read()) result.Add(new PendingDelete(Guid.Parse(reader.GetString(0)), reader.GetInt64(1)));
-        return result;
-    }
+    public IReadOnlyList<PendingDelete> GetPendingDeletes() =>
+        Query("SELECT id, cloud_revision FROM pending_deletes", r => new PendingDelete(Guid.Parse(r.GetString(0)), r.GetInt64(1)));
 
     public void ClearPendingDelete(Guid id) =>
         Execute("DELETE FROM pending_deletes WHERE id = $id", ("$id", id.ToString()));

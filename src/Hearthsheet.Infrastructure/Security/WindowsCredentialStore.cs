@@ -21,15 +21,13 @@ public interface ISecretStore
 public sealed class WindowsCredentialStore : ISecretStore
 {
     private const string TargetPrefix = "Hearthsheet/";
-    private const string LegacyTargetPrefix = "DndSheet/"; // pre-rename token; still read so it survives the upgrade
     private const int CredTypeGeneric = 1;
     private const int CredPersistLocalMachine = 2;
     private const int ErrorNotFound = 1168;
 
-    public string? Read(string key) => ReadTarget(TargetPrefix + key) ?? ReadTarget(LegacyTargetPrefix + key);
-
-    private static string? ReadTarget(string target)
+    public string? Read(string key)
     {
+        var target = TargetPrefix + key;
         if (!CredRead(target, CredTypeGeneric, 0, out var handle))
         {
             var error = Marshal.GetLastWin32Error();

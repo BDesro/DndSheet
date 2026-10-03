@@ -22,13 +22,13 @@ Characters are stored locally in SQLite, autosaved, backed up daily, and can be 
 
 **From a release:** download `Hearthsheet-<version>-win-x64.zip` from the [Releases page](https://github.com/BDesro/Hearthsheet/releases), extract it, and double-click **`Install.cmd`**. The installer:
 
-1. Checks for the .NET 10 Desktop Runtime. If it's missing, it asks before installing it (through winget, or by opening Microsoft's download page) and re-checks. If the runtime still isn't there, it stops without changing anything.
+1. Checks for the .NET 10 Desktop Runtime. If it's missing, it points you to Microsoft's download page and stops without changing anything.
 2. Copies the app to `%LOCALAPPDATA%\Programs\Hearthsheet` (no admin rights needed).
 3. Creates Start Menu and desktop shortcuts, then offers to launch the app.
 
 After that, the app updates itself from new releases. Your characters live in `%LOCALAPPDATA%\Hearthsheet`, so reinstalling never touches them. Installer options: `-NoDesktopShortcut`, `-NoLaunch`, `-InstallDir <path>`.
 
-**From source:** this checks for the .NET 10 SDK (and offers to install it), builds the package, and runs the same installer:
+**From source:** this checks for the .NET 10 SDK (and points you to its download page if missing), builds the package, and runs the same installer:
 
 ```bash
 powershell -ExecutionPolicy Bypass -File scripts/install.ps1
@@ -64,38 +64,24 @@ pwsh ./scripts/publish.ps1
 
 This produces `artifacts/Hearthsheet-<version>-win-x64.zip` and `artifacts/SHA256SUMS.txt`. Use it to check a package locally; published releases are built by GitHub Actions.
 
-### Releasing a new version
+### Branches and releases
 
-`main` accepts changes only through pull requests with passing CI, and release tags are immutable, so a release is a version-bump PR followed by a tag:
+- **`main`** is what ships. Nothing is pushed to it directly: it only changes by merging a pull request from `dev`, and only when you decide to release.
+- **`dev`** is the permanent integration branch. All work lands there through pull requests (feature branches off `dev`, PR into `dev`, CI must pass). Nothing is pushed to `dev` directly either.
+- Merge feature PRs into `dev` with **squash**. Merge the `dev` → `main` release PR with a **merge commit**, so `dev` never diverges from `main`.
+
+A release is the `dev` → `main` pull request. Put the version bump in it (on `dev`, via a normal PR first or as part of the last one): set `<Version>` in `Directory.Build.props` and rewrite `RELEASE_NOTES.md` for that version (plain text with `-` bullets, because the app's update dialog shows it as is). CI refuses a PR into `main` whose version is not newer than the latest release tag.
 
 ```bash
-git checkout main
+git checkout dev
 git pull
-git checkout -b release/v1.2.0
+gh pr create --base main --head dev --title "Release 1.3.0" --body "Changes: ..."
 ```
 
-Set `<Version>1.2.0</Version>` in `Directory.Build.props` and rewrite `RELEASE_NOTES.md` for the new version (plain text with `-` bullets, because the app's update dialog shows it as is), then:
+When CI passes, merge the PR (merge commit). The **Release** workflow then runs on `main` by itself: it reads `<Version>`, and if it is newer than the latest release it runs the tests, builds the zip and checksum, and publishes the GitHub release, creating the tag on the merge commit. Otherwise it does nothing. Watch it with `gh run watch`, or in the repository's Actions tab. Installed copies show an "Update 1.3.0 available" button within a startup or two.
 
-```bash
-git commit -am "Release 1.2.0"
-git push -u origin release/v1.2.0
-gh pr create --base main --title "Release 1.2.0" --body "Changes: ..."
-```
-
-When CI passes, merge the PR, then tag the merged commit on `main`:
-
-```bash
-gh pr merge --squash --delete-branch
-git checkout main
-git pull
-git tag -a v1.2.0 -m "Hearthsheet 1.2.0"
-git push origin v1.2.0
-```
-
-The **Release** workflow checks that the tag matches `<Version>`, runs the tests, builds the zip and checksum, and publishes the GitHub release. Watch it with `gh run watch`, or in the repository's Actions tab. Installed copies show an "Update 1.2.0 available" button within a startup or two.
-
-- Use [semantic versions](https://semver.org): patch for fixes, minor for features, major for breaking changes. A tag containing `-` (e.g. `v1.3.0-beta.1`) is published as a pre-release, which only users with `AllowPreRelease` see.
-- If a release is broken, don't move or delete the tag (the ruleset blocks it anyway). Fix forward with the next patch version.
+- Use [semantic versions](https://semver.org): patch for fixes, minor for features, major for breaking changes. Tags must be plain `X.Y.Z`; there is no pre-release channel.
+- If a release is broken, don't move or delete the tag (the ruleset blocks it anyway). Fix forward with the next patch version, through `dev` as usual.
 
 To install: unzip the package into a folder you own, for example `%LOCALAPPDATA%\Programs\Hearthsheet`, and run `Hearthsheet.exe`. The app never needs administrator rights.
 
@@ -103,24 +89,16 @@ To install: unzip the package into a folder you own, for example `%LOCALAPPDATA%
 
 Settings are layered. Later sources override earlier ones, so no binary has to change:
 
-1. `appsettings.json` next to the exe (shipped production defaults, `DevelopmentMode: false`)
-2. `appsettings.Development.json` (present only in Debug build output)
-3. `%LOCALAPPDATA%\Hearthsheet\appsettings.user.json` (per-user overrides; see `appsettings.user.example.json`)
-4. Environment variables prefixed `HEARTHSHEET_`, e.g. `HEARTHSHEET_Application__DevelopmentMode=true`
-5. Command line: `--dev`, or `--Section:Key=value`
+1. `appsettings.json` next to the exe (shipped defaults)
+2. `%LOCALAPPDATA%\Hearthsheet\appsettings.user.json` (per-user overrides; see `appsettings.user.example.json`)
 
 | Key | Default | Meaning |
 |---|---|---|
-| `Application:DevelopmentMode` | `false` | Opens a diagnostics console and logs at Debug level. It only affects diagnostics; it unlocks no extra capabilities. |
 | `Application:DataDirectory` | `%LOCALAPPDATA%\Hearthsheet` | Where the database, logs, backups and update staging live. |
-| `Application:AutosaveDelaySeconds` | `2` | Idle time after an edit before autosave. |
-| `Logging:FileMinimumLevel` | `Information` | Minimum level written to the log file (Debug in development mode). |
-| `Logging:RetainDays` | `14` | Log file retention. |
+| `Logging:FileMinimumLevel` | `Information` | Minimum level written to the log file (set `Debug` for verbose logs). |
 | `Updates:Owner` / `Updates:Repository` | *(empty)* | The GitHub repository whose releases are the update source. Update checks are off until these are set. |
 | `Updates:CheckOnStartup` | `true` | Silent check at startup; a status-bar button appears when an update exists. |
-| `Updates:AllowPreRelease` | `false` | Offer `-beta` style releases. |
 | `Sync:Url` / `Sync:AnonKey` | *(the project's Supabase instance)* | The Supabase project URL and its public publishable key. When empty, the Account menu and sync are hidden. See [docs/CLOUD_SYNC.md](docs/CLOUD_SYNC.md) to use your own project. |
-| `Sync:IntervalMinutes` | `5` | How often a signed-in app syncs in the background. |
 
 ## Where things are stored
 
@@ -130,7 +108,6 @@ Settings are layered. Later sources override earlier ones, so no binary has to c
 | Daily backups (last 10) | `%LOCALAPPDATA%\Hearthsheet\backups\` |
 | Logs | `%LOCALAPPDATA%\Hearthsheet\logs\app-YYYYMMDD.log`. In the app: Help → Open log folder |
 | Updater log | `%LOCALAPPDATA%\Hearthsheet\logs\updater.log` |
-| GitHub token (optional) | Windows Credential Manager → Windows Credentials → `Hearthsheet/GitHubToken` |
 | Cloud session (optional, only with "Stay signed in") | Windows Credential Manager → Windows Credentials → `Hearthsheet/supabase-session` |
 
 ## Keyboard shortcuts
