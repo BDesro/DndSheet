@@ -12,13 +12,10 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v7
-      - name: A pull request into main must carry a new version
+      - name: A pull request into main must be newer than the latest release
         if: github.base_ref == 'main'
         shell: pwsh
-        run: |
-          $version = ([xml](Get-Content Directory.Build.props)).Project.PropertyGroup.Version | Select-Object -First 1
-          git ls-remote --exit-code --tags origin "refs/tags/v$version" *> $null
-          if ($LASTEXITCODE -eq 0) { throw "Tag v$version already exists. Bump <Version> in Directory.Build.props and rewrite RELEASE_NOTES.md; merging this PR releases that version." }
+        run: ./scripts/check-version.ps1
       - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: 10.0.x

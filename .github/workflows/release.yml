@@ -1,7 +1,7 @@
 name: Release
 # Runs when a pull request is merged into main (a merge is a push to main). The version in Directory.Build.props
-# decides the release: if tag v<version> doesn't exist yet, the workflow tests, packages and publishes a release that
-# creates that tag on the merge commit. If the tag already exists (a merge that didn't bump the version) it does nothing.
+# decides the release: if it is newer than the latest release tag, the workflow tests, packages and publishes a release
+# that creates tag v<version> on the merge commit. Otherwise (a merge that didn't bump the version) it does nothing.
 # Uses the workflow's own GITHUB_TOKEN, no PAT. The release notes shown in the app's update dialog are RELEASE_NOTES.md:
 # plain text, rewritten for each release.
 on:
@@ -16,17 +16,17 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v7
-      - name: Read version and check whether it is already released
+      - name: Read version and check that it is newer than the latest release
         id: version
         shell: pwsh
         run: |
           $version = ([xml](Get-Content Directory.Build.props)).Project.PropertyGroup.Version | Select-Object -First 1
-          if ($version -notmatch '^\d+\.\d+\.\d+$') { throw "Invalid version '$version' in Directory.Build.props" }
-          git ls-remote --exit-code --tags origin "refs/tags/v$version" *> $null
-          $exists = $LASTEXITCODE -eq 0
-          if ($exists) { Write-Host "::warning::Tag v$version already exists; no release published. Bump <Version> in Directory.Build.props to release." }
+          ./scripts/check-version.ps1
+          $new = $LASTEXITCODE -eq 0
+          $global:LASTEXITCODE = 0
+          if (-not $new) { Write-Host "::warning::No release published: v$version is not newer than the latest release." }
           "version=$version" >> $env:GITHUB_OUTPUT
-          "new=$((-not $exists).ToString().ToLower())" >> $env:GITHUB_OUTPUT
+          "new=$($new.ToString().ToLower())" >> $env:GITHUB_OUTPUT
       - uses: actions/setup-dotnet@v6
         if: steps.version.outputs.new == 'true'
         with:
