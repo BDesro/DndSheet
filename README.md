@@ -64,38 +64,24 @@ pwsh ./scripts/publish.ps1
 
 This produces `artifacts/Hearthsheet-<version>-win-x64.zip` and `artifacts/SHA256SUMS.txt`. Use it to check a package locally; published releases are built by GitHub Actions.
 
-### Releasing a new version
+### Branches and releases
 
-`main` accepts changes only through pull requests with passing CI, and release tags are immutable, so a release is a version-bump PR followed by a tag:
+- **`main`** is what ships. Nothing is pushed to it directly: it only changes by merging a pull request from `dev`, and only when you decide to release.
+- **`dev`** is the permanent integration branch. All work lands there through pull requests (feature branches off `dev`, PR into `dev`, CI must pass). Nothing is pushed to `dev` directly either.
+- Merge feature PRs into `dev` with **squash**. Merge the `dev` → `main` release PR with a **merge commit**, so `dev` never diverges from `main`.
+
+A release is the `dev` → `main` pull request. Put the version bump in it (on `dev`, via a normal PR first or as part of the last one): set `<Version>` in `Directory.Build.props` and rewrite `RELEASE_NOTES.md` for that version (plain text with `-` bullets, because the app's update dialog shows it as is). CI refuses a PR into `main` whose version already has a tag.
 
 ```bash
-git checkout main
+git checkout dev
 git pull
-git checkout -b release/v1.2.0
+gh pr create --base main --head dev --title "Release 1.3.0" --body "Changes: ..."
 ```
 
-Set `<Version>1.2.0</Version>` in `Directory.Build.props` and rewrite `RELEASE_NOTES.md` for the new version (plain text with `-` bullets, because the app's update dialog shows it as is), then:
-
-```bash
-git commit -am "Release 1.2.0"
-git push -u origin release/v1.2.0
-gh pr create --base main --title "Release 1.2.0" --body "Changes: ..."
-```
-
-When CI passes, merge the PR, then tag the merged commit on `main`:
-
-```bash
-gh pr merge --squash --delete-branch
-git checkout main
-git pull
-git tag -a v1.2.0 -m "Hearthsheet 1.2.0"
-git push origin v1.2.0
-```
-
-The **Release** workflow checks that the tag matches `<Version>`, runs the tests, builds the zip and checksum, and publishes the GitHub release. Watch it with `gh run watch`, or in the repository's Actions tab. Installed copies show an "Update 1.2.0 available" button within a startup or two.
+When CI passes, merge the PR (merge commit). The **Release** workflow then runs on `main` by itself: it reads `<Version>`, and if `v<version>` doesn't exist yet it runs the tests, builds the zip and checksum, and publishes the GitHub release, creating the tag on the merge commit. If the tag already exists it does nothing. Watch it with `gh run watch`, or in the repository's Actions tab. Installed copies show an "Update 1.3.0 available" button within a startup or two.
 
 - Use [semantic versions](https://semver.org): patch for fixes, minor for features, major for breaking changes. Tags must be plain `X.Y.Z`; there is no pre-release channel.
-- If a release is broken, don't move or delete the tag (the ruleset blocks it anyway). Fix forward with the next patch version.
+- If a release is broken, don't move or delete the tag (the ruleset blocks it anyway). Fix forward with the next patch version, through `dev` as usual.
 
 To install: unzip the package into a folder you own, for example `%LOCALAPPDATA%\Programs\Hearthsheet`, and run `Hearthsheet.exe`. The app never needs administrator rights.
 

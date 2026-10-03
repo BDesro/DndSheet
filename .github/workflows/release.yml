@@ -1,10 +1,12 @@
 name: Release
-# Push a tag like v1.2.0 (matching <Version> in Directory.Build.props) to publish a release that
-# installed copies of the app will offer as an update. Uses the workflow's own GITHUB_TOKEN — no PAT.
-# The release notes shown in the app's update dialog are RELEASE_NOTES.md: plain text, rewritten for each release.
+# Runs when a pull request is merged into main (a merge is a push to main). The version in Directory.Build.props
+# decides the release: if tag v<version> doesn't exist yet, the workflow tests, packages and publishes a release that
+# creates that tag on the merge commit. If the tag already exists (a merge that didn't bump the version) it does nothing.
+# Uses the workflow's own GITHUB_TOKEN, no PAT. The release notes shown in the app's update dialog are RELEASE_NOTES.md:
+# plain text, rewritten for each release.
 on:
   push:
-    tags: ['v*.*.*']
+    branches: [main]
 
 permissions:
   contents: write
@@ -14,26 +16,33 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v7
+      - name: Read version and check whether it is already released
+        id: version
+        shell: pwsh
+        run: |
+          $version = ([xml](Get-Content Directory.Build.props)).Project.PropertyGroup.Version | Select-Object -First 1
+          if ($version -notmatch '^\d+\.\d+\.\d+$') { throw "Invalid version '$version' in Directory.Build.props" }
+          git ls-remote --exit-code --tags origin "refs/tags/v$version" *> $null
+          $exists = $LASTEXITCODE -eq 0
+          if ($exists) { Write-Host "::warning::Tag v$version already exists; no release published. Bump <Version> in Directory.Build.props to release." }
+          "version=$version" >> $env:GITHUB_OUTPUT
+          "new=$((-not $exists).ToString().ToLower())" >> $env:GITHUB_OUTPUT
       - uses: actions/setup-dotnet@v6
+        if: steps.version.outputs.new == 'true'
         with:
           dotnet-version: 10.0.x
-      - name: Check tag matches project version
-        shell: pwsh
-        run: |
-          $tag = '${{ github.ref_name }}'.TrimStart('v')
-          $version = ([xml](Get-Content Directory.Build.props)).Project.PropertyGroup.Version | Select-Object -First 1
-          if ($tag -ne $version) { throw "Tag $tag does not match Directory.Build.props version $version" }
-      - run: dotnet test Hearthsheet.slnx -c Release
+      - name: Test
+        if: steps.version.outputs.new == 'true'
+        run: dotnet test Hearthsheet.slnx -c Release
       - name: Package
+        if: steps.version.outputs.new == 'true'
         shell: pwsh
-        run: |
-          $version = '${{ github.ref_name }}'.TrimStart('v')
-          ./scripts/publish.ps1 -Version $version
+        run: ./scripts/publish.ps1 -Version '${{ steps.version.outputs.version }}'
       - name: Create release
+        if: steps.version.outputs.new == 'true'
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          $tag = '${{ github.ref_name }}'
-          $args = @($tag, (Get-Item artifacts/*.zip).FullName, 'artifacts/SHA256SUMS.txt', '--title', "Hearthsheet $tag", '--notes-file', 'RELEASE_NOTES.md')
-          gh release create @args
+          $tag = 'v${{ steps.version.outputs.version }}'
+          gh release create $tag (Get-Item artifacts/*.zip).FullName artifacts/SHA256SUMS.txt --target $env:GITHUB_SHA --title "Hearthsheet $tag" --notes-file RELEASE_NOTES.md
