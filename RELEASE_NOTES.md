@@ -1,9 +1,10 @@
-New: optional cloud sync
-- Sign in from the new Account menu to keep your characters in sync across your computers.
-- Signing in is optional. Without an account, Hearthsheet works exactly as before.
-- Your characters always stay on this computer and keep working offline.
-- If you edit the same character on two computers, nothing is lost: the cloud version wins and your version is kept as a "conflict copy".
-- Your email now shows in the top right while you are signed in.
+Maintenance release: a leaner Hearthsheet
+- Behind the scenes cleanup: about 4,000 lines of unused code and documentation were removed, along with three packages the app no longer needs. Your characters and everything you see on the sheet work as before.
+
+Removed
+- Help > GitHub token is gone. Updates come from Hearthsheet's public releases, so no token is needed.
+- Developer-only options are gone: development mode and its diagnostics console, the --dev flag, HEARTHSHEET_ environment variables, command-line settings, and the Sync:IntervalMinutes, Application:AutosaveDelaySeconds and Logging:RetainDays settings. Sync still runs every 5 minutes and autosave still waits 2 seconds.
+- Update checks only offer regular releases. There is no beta channel anymore.
 
 Good to know
-- The first launch upgrades your character database. Your characters are not changed, but older versions of Hearthsheet can't open the upgraded database.
+- For more detail in the log file, set Logging:FileMinimumLevel to Debug in %LOCALAPPDATA%\Hearthsheet\appsettings.user.json.
