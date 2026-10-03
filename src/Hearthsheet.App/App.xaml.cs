@@ -29,7 +29,7 @@ public partial class App
         AppSettings settings;
         try
         {
-            settings = AppSettings.Load(e.Args);
+            settings = AppSettings.Load();
         }
         catch (Exception ex) when (ex is InvalidDataException or FormatException or InvalidOperationException)
         {
@@ -39,20 +39,17 @@ public partial class App
         }
 
         var paths = new AppPaths(settings.Application.DataDirectory);
-        var dev = settings.Application.DevelopmentMode;
-        var sinks = new List<ILogSink> { new FileLogSink(paths.Logs, dev ? LogLevel.Debug : settings.Logging.FileMinimumLevel, settings.Logging.RetainDays) };
-        if (dev && DevConsole.Open()) sinks.Add(new ConsoleLogSink());
         _loggerFactory = LoggerFactory.Create(b =>
         {
             b.ClearProviders();
-            b.SetMinimumLevel(dev ? LogLevel.Debug : LogLevel.Information);
-            b.AddProvider(new AppLoggerProvider(sinks));
+            b.SetMinimumLevel(LogLevel.Trace);
+            b.AddProvider(new FileLoggerProvider(paths.Logs, settings.Logging.FileMinimumLevel));
         });
         _log = _loggerFactory.CreateLogger("App");
         InstallCrashHandlers();
 
-        _log.LogInformation("Application started: version {Version}, build {Build}, development mode {Dev}",
-            AppSettings.AppVersion, AppSettings.BuildConfiguration, dev);
+        _log.LogInformation("Application started: version {Version}, build {Build}",
+            AppSettings.AppVersion, AppSettings.BuildConfiguration);
         _log.LogDebug("Data directory: {Dir}", paths.Root);
         _log.LogDebug("Update source: {Owner}/{Repo} (enabled {Enabled})", settings.Updates.Owner, settings.Updates.Repository, settings.Updates.Enabled);
         if (!string.IsNullOrWhiteSpace(settings.Sync.Url) && !settings.Sync.IsConfigured)
@@ -81,8 +78,7 @@ public partial class App
     private MainViewModel Compose(AppSettings settings, AppPaths paths)
     {
         var factory = _loggerFactory!;
-        var migrator = CharacterMigrator.Default;
-        var repository = new SqliteCharacterRepository(paths.Database, migrator, factory.CreateLogger<SqliteCharacterRepository>());
+        var repository = new SqliteCharacterRepository(paths.Database, factory.CreateLogger<SqliteCharacterRepository>());
         try
         {
             DatabaseBackups.RunDaily(repository, paths.Backups, keep: 10, factory.CreateLogger("Backup"));
@@ -92,11 +88,11 @@ public partial class App
             _log.LogWarning(ex, "Database backup failed; continuing");
         }
 
-        var library = new CharacterLibrary(repository, new PortableCharacterFile(migrator), migrator,
+        var library = new CharacterLibrary(repository, new PortableCharacterFile(),
             AppSettings.AppVersion, factory.CreateLogger<CharacterLibrary>());
         var secrets = new WindowsCredentialStore();
-        var releaseSource = new GitHubReleaseSource(settings.Updates, secrets, userAgentVersion: AppSettings.AppVersion);
-        var updates = new UpdateService(releaseSource, settings.Updates, SemVersion.Parse(AppSettings.AppVersion),
+        var releaseSource = new GitHubReleaseSource(settings.Updates, userAgentVersion: AppSettings.AppVersion);
+        var updates = new UpdateService(releaseSource, settings.Updates, Version.Parse(AppSettings.AppVersion),
             paths.Updates, factory.CreateLogger<UpdateService>());
 
         CloudServices? cloud = null;
@@ -105,12 +101,12 @@ public partial class App
             var http = new SupabaseHttp(settings.Sync, userAgentVersion: AppSettings.AppVersion);
             var auth = new SupabaseAuth(http, secrets);
             var sync = new CloudSync(repository, repository, new SupabaseCharacterStore(http, auth), auth,
-                migrator, factory.CreateLogger<CloudSync>());
-            cloud = new CloudServices(auth, sync, settings.Sync);
+                factory.CreateLogger<CloudSync>());
+            cloud = new CloudServices(auth, sync);
         }
 
         return new MainViewModel(new MainServices(
-            library, RestService.CreateDefault(), updates, settings, paths, secrets, new Dialogs(), factory, cloud));
+            repository, library, RestService.CreateDefault(), updates, settings, paths, new Dialogs(), factory, cloud));
     }
 
     private void InstallCrashHandlers()

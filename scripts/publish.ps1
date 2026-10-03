@@ -10,7 +10,7 @@ param([string]$Version)
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
 if (-not $Version) { $Version = ([xml](Get-Content "$root/Directory.Build.props")).Project.PropertyGroup.Version | Select-Object -First 1 }
-if ($Version -notmatch '^\d+\.\d+\.\d+(-[0-9A-Za-z.]+)?$') { throw "Invalid version '$Version'" }
+if ($Version -notmatch '^\d+\.\d+\.\d+$') { throw "Invalid version '$Version'" }
 
 $artifacts = Join-Path $root 'artifacts'
 $stage = Join-Path $artifacts 'publish/Hearthsheet'
@@ -25,7 +25,6 @@ if ($LASTEXITCODE) { throw 'Updater publish failed' }
 Get-ChildItem $stage -Filter *.pdb | Remove-Item
 # The installer (dependency check + shortcuts) ships inside the package: users run Install.cmd.
 Copy-Item "$root/packaging/*" $stage
-if (Test-Path "$stage/appsettings.Development.json") { throw 'Development settings must never ship in a release package' }
 
 $zipName = "Hearthsheet-$Version-win-x64.zip"
 Compress-Archive -Path "$stage/*" -DestinationPath (Join-Path $artifacts $zipName)

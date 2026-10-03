@@ -10,7 +10,7 @@ public class SyncStoreTests : IDisposable
 {
     private readonly TempDir _dir = new();
     private SqliteCharacterRepository NewRepository() =>
-        new(_dir.File("characters.db"), CharacterMigrator.Default, NullLogger<SqliteCharacterRepository>.Instance);
+        new(_dir.File("characters.db"), NullLogger<SqliteCharacterRepository>.Instance);
 
     public void Dispose() => _dir.Dispose();
 
@@ -75,7 +75,7 @@ public class SyncStoreTests : IDisposable
         var repo = NewRepository();
         var c = Samples.Rich();
         repo.Save(c);
-        var remote = CharacterJson.Clone(c, CharacterMigrator.Default);
+        var remote = CharacterJson.Clone(c);
         remote.Identity.Name = "Remote";
 
         Assert.False(repo.ApplyRemote(remote, 5));
